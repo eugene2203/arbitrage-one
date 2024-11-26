@@ -33,7 +33,7 @@ import { spawn } from 'node:child_process';
 *
 * */
 
-const bot = new Telegraf(TELEGRAM_BOT_TOKEN_V2);
+const bot = new Telegraf(TELEGRAM_BOT_TOKEN_V1);
 const positionInstance = {
     positionId : '', // unique position identifier "kPEPE-PEPEUSDT_open_spot" or "kPEPE-PEPEUSDT_close_perp"
     timer : 0,
