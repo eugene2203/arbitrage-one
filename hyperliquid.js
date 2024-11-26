@@ -33,6 +33,7 @@ class Hyperliquid {
     return new Promise((resolve, reject) => {
       if (this.coins[coin]?.subscribed === true) {
         resolve();
+        return;
       }
       if (this.ws && this.ws.readyState === WebSocket.OPEN) {
         if (!this.coins[coin]) {
@@ -49,13 +50,15 @@ class Hyperliquid {
             "type": "l2Book"
           }
         }));
-        const _tmr = setInterval(() => {
+        let _tmr = setInterval(() => {
           if(this.coins[coin]?.subscribed === true) {
             clearInterval(_tmr);
+            _tmr = 0;
             resolve();
           }
         }, 100)
         setTimeout(() => {
+          if(_tmr === 0)  return;
           if(!this.coins[coin] || this.coins[coin]?.subscribed !== true) {
             clearInterval(_tmr);
             console.error(`${new Date().toISOString()}\t${this.sessionId}\tHyperliquid subscribe to ${coin} failed.`);
@@ -127,6 +130,7 @@ class Hyperliquid {
     return new Promise((resolve, reject) => {
       if(this.ws && this.ws.readyState === WebSocket.OPEN) {
         resolve();
+        return;
       }
       const ws = new WebSocket(WSS_HYPERLIQUID_URL);
       if (ws) {

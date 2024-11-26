@@ -49,8 +49,11 @@ class Bybit {
 
   subscribe = (symbol, market) => {
     return new Promise((resolve, reject) => {
+      console.warn(`subscribe = (${symbol}, ${market})`);
       if(this.symbols[market] && this.symbols[market][symbol]?.subscribed === true) {
+        console.warn(`Autoresolve!`);
         resolve();
+        return;
       }
       this.symbols[market][symbol] = {
         subscribed: false,
@@ -62,14 +65,18 @@ class Bybit {
         "op": "subscribe",
         "args": [`orderbook.50.${symbol}`]
       }));
+      console.warn(`Sent subscribe to Bybit ${market}/${symbol}`);
       let _tmr = setInterval(() => {
         if(this.symbols[market] && this.symbols[market][symbol]?.subscribed === true) {
           clearInterval(_tmr);
           _tmr=0;
+          console.warn(`Resolve by timer`);
           resolve();
         }
       }, 100)
       setTimeout(() => {
+        console.warn(`Start Timeout. _tmr=${_tmr}`);
+
         if( _tmr !== 0 ) {
           clearInterval(_tmr);
           console.error(`${new Date().toISOString()}\t${this.sessionId}\tBybit ${market} subscribe to ${symbol} failed.`);
@@ -119,6 +126,7 @@ class Bybit {
     return new Promise((resolve, reject) => {
       if(this.ws[market] && this.ws[market].readyState === WebSocket.OPEN) {
         resolve();
+        return;
       }
 
       const ws = new WebSocket(WSS_BYBIT_URL[market]);
