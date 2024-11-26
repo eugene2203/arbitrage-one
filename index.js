@@ -77,7 +77,7 @@ const options = {
 const _formatter = new Intl.DateTimeFormat('fr-FR', options);
 class FormatterDate {
     format(date) {
-        return _formatter.format(date).replaceAll(',','');
+        return _formatter.format(date).replace(',','');
     }
 }
 const formatter = new FormatterDate();
