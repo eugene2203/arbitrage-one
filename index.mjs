@@ -47,7 +47,7 @@ class BotInstance {
     }
 }
 
-const b = new BotInstance(TELEGRAM_BOT_TOKEN_V2);
+const b = new BotInstance(TELEGRAM_BOT_TOKEN_V1);
 const bot = b.bot;
 
 
