@@ -1,3 +1,4 @@
+const ADMIN_ACCOUNT = 6968489310; // Admin account for start positions
 const TELEGRAM_BOT_TOKEN_V1="7728426096:AAHS6lLZ4JJivtd5B6FAHnVC7HSdX8lMVIQ";
 const TELEGRAM_BOT_TOKEN_V2="7717946510:AAETKEudKzvTfQlqmtQS-6RTcgPy-UM7-vE";
 const DB_PATH = '/mnt/c/var/data/arbitrage.db';
@@ -237,13 +238,18 @@ const setArbitragePosition = async (positionInstance, sessionId=0) => {
         return false;
     }
 
-    bot.telegram.sendMessage(sessionId, `<b><u>Start monitoring</u>:</b>\n` +
-      `<b><u>${positionInstance.currentDirection}</u></b> Hyperliquid <b>${positionInstance.symbolHL}</b> vs Bybit <b><i>${positionInstance.BYBIT_SPOT_OR_PERP}</i></b> for <b>${positionInstance.symbolBybit}</b>.\n` +
-      `Wait for delta: <b>${positionInstance.MONITORING_DELTA}</b>%\n` +
-      `Duration of delta: <b>${positionInstance.targetSuccessTime / 1000 / 60} min</b>\n` +
-      `PositionId: <b>${positionInstance.positionId}</b>`,
-      {parse_mode: 'HTML'}
-    );
+    try {
+        await bot.telegram.sendMessage(sessionId, `<b><u>Start monitoring</u>:</b>\n` +
+          `<b><u>${positionInstance.currentDirection}</u></b> Hyperliquid <b>${positionInstance.symbolHL}</b> vs Bybit <b><i>${positionInstance.BYBIT_SPOT_OR_PERP}</i></b> for <b>${positionInstance.symbolBybit}</b>.\n` +
+          `Wait for delta: <b>${positionInstance.MONITORING_DELTA}</b>%\n` +
+          `Duration of delta: <b>${positionInstance.targetSuccessTime / 1000 / 60} min</b>\n` +
+          `PositionId: <b>${positionInstance.positionId}</b>`,
+          {parse_mode: 'HTML'}
+        );
+    }
+    catch (e) {
+        console.error(`${new Date().toISOString()}\t${sessionId}\tError sendMessage to Telegram: ${positionInstance.currentDirection} ${positionInstance.symbolHL}/${positionInstance.symbolBybit}`,e);
+    }
 
     const _testInstance = b.monitoringPools[positionInstance.positionId];
     stopTimer(_testInstance);
@@ -430,7 +436,7 @@ const restorePositions = async () => {
 
 // Command section
 bot.start(async (ctx) => {
-    ctx.replyWithHTML(`Hi <u>${ctx.from.username}</u>!\nWelcome to <b>ivnArbitrageBot</b>!\n${formatter.format(new Date())}`);
+    ctx.replyWithHTML(`Hi <u>${ctx.session.username}</u>!\nWelcome to <b>ivnArbitrageBot</b>!\nYour ID: ${ctx.session.id}\n${formatter.format(new Date())}`);
 });
 
 bot.command('help', (ctx) => {
@@ -448,7 +454,7 @@ bot.command('disconnect', async (ctx) => {
 });
 
 bot.command('position', async (ctx) => {
-    let [command, direction, coinHL, spotOrPerp, coinBB, delta, duration] = ctx.message.text.split(' ');
+    let [command, direction, coinHL, spotOrPerp, coinBB, delta, duration, targetUser] = ctx.message.text.split(' ');
     if (!direction || !coinHL || !spotOrPerp || !coinBB || !delta || !duration) {
         ctx.reply('Sorry, I did not understand the command. Please use\n/position [open/close] [coinHL] [spot/perp] [symbolBB] [delta] [duration]');
         return;
@@ -480,6 +486,9 @@ bot.command('position', async (ctx) => {
         ctx.reply('Sorry, I did not understand duration. Please use positive number');
         return;
     }
+    if(ctx.session.id !== ADMIN_ACCOUNT) {
+        targetUser = 0; // Forbid to set target user for non-admin users
+    }
 
     const pInstance = JSON.parse(JSON.stringify(positionInstance));
 
@@ -502,7 +511,7 @@ bot.command('position', async (ctx) => {
         await b.HL.connect()
         await b.BB.connect(pInstance.BYBIT_SPOT_OR_PERP);
 
-        if(!await setArbitragePosition(pInstance, ctx.session.id)) {
+        if(!await setArbitragePosition(pInstance, targetUser?targetUser:ctx.session.id)) {
             console.error(`${new Date().toISOString()}\t${ctx.session.id}\tFailed to setArbitragePosition: ${pInstance.symbolHL} vs ${pInstance.symbolBybit}`);
             ctx.reply(`Failed to setArbitragePosition: ${pInstance.symbolHL} vs ${pInstance.symbolBybit}`);
         }
