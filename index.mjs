@@ -1,7 +1,8 @@
 const ADMIN_ACCOUNT = 6968489310; // Admin account for start positions
 const TELEGRAM_BOT_TOKEN_V1="7728426096:AAHS6lLZ4JJivtd5B6FAHnVC7HSdX8lMVIQ";
 const TELEGRAM_BOT_TOKEN_V2="7717946510:AAETKEudKzvTfQlqmtQS-6RTcgPy-UM7-vE";
-const DB_PATH = '/mnt/c/var/data/arbitrage.db';
+// const DB_PATH = '/mnt/c/var/data/arbitrage.db';
+const DB_PATH = './data/arbitrage.db';
 
 import { Telegraf, session } from 'telegraf';
 import { message } from 'telegraf/filters';
