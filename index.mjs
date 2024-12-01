@@ -378,7 +378,6 @@ const addToMonitoringPool = (positionInstance, sessionId) => {
             positionInstance.MONITORING_DELTA, positionInstance.targetSuccessTime, positionInstance.positionVolume, JSON.stringify({...positionInstance, ...{ timer:0 }}));
     }
     catch (e) {
-        console.warn({...positionInstance, ...{ timer:0 }})
         console.error(`${new Date().toISOString()}\t${sessionId}\t${positionInstance.positionId}\tError insert into db.positions: ${e.message}`);
     }
 }

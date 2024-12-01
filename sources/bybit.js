@@ -49,9 +49,7 @@ class Bybit {
 
   subscribe = (symbol, market) => {
     return new Promise((resolve, reject) => {
-      console.warn(`subscribe = (${symbol}, ${market})`);
       if(this.symbols[market] && this.symbols[market][symbol]?.subscribed === true) {
-        console.warn(`Autoresolve!`);
         resolve();
         return;
       }
@@ -65,18 +63,14 @@ class Bybit {
         "op": "subscribe",
         "args": [`orderbook.50.${symbol}`]
       }));
-      console.warn(`Sent subscribe to Bybit ${market}/${symbol}`);
       let _tmr = setInterval(() => {
         if(this.symbols[market] && this.symbols[market][symbol]?.subscribed === true) {
           clearInterval(_tmr);
           _tmr=0;
-          console.warn(`Resolve by timer`);
           resolve();
         }
       }, 100)
       setTimeout(() => {
-        console.warn(`Start Timeout. _tmr=${_tmr}`);
-
         if( _tmr !== 0 ) {
           clearInterval(_tmr);
           console.error(`${new Date().toISOString()}\t${this.sessionId}\tBybit ${market} subscribe to ${symbol} failed.`);
@@ -138,7 +132,6 @@ class Bybit {
             console.error(`${new Date().toISOString()}\t${this.sessionId}\tBybit ${market} WebSocket progress error:`, error);
           }
           ws.onclose = async (event) => {
-            console.warn(`${new Date().toISOString()}\t${this.sessionId}\tBybit ${market} WebSocket closed:`, event);
             this.aliveTimer[market]!==0 && clearInterval(this.aliveTimer[market]) && (this.aliveTimer[market] = 0);
             if(this.keepAlive[market]) {
               console.log(`${new Date().toISOString()}\t${this.sessionId}\tReconnecting to Bybit ${market} WebSocket`);
@@ -156,7 +149,6 @@ class Bybit {
           reject(error);
         }
         ws.onclose = (closeEvent) => {
-          console.warn(`${new Date().toISOString()}\t${this.sessionId}\tBybit ${market} WebSocket closed:`, closeEvent);
           this.aliveTimer[market]!==0 && clearInterval(this.aliveTimer[market]) && (this.aliveTimer[market] = 0);
           reject(closeEvent);
         }
@@ -256,7 +248,6 @@ class Bybit {
   _checkAlive = async (market) => {
     if(this.ws[market] && this.ws[market].readyState === WebSocket.OPEN) {
       for (const [symbol, data] of Object.entries(this.symbols[market])) {
-        // console.warn('_checkAlive',market,symbol,data.subscribed,data.cntMessages,data.lastMonitoredCntMessages);
         if (data.subscribed === true) {
           if(data.cntMessages > data.lastMonitoredCntMessages) {
             data.lastMonitoredCntMessages = data.cntMessages;
