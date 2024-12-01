@@ -1,8 +1,7 @@
-const ADMIN_ACCOUNT = 6968489310; // Admin account for start positions
 const TELEGRAM_BOT_TOKEN_V1="7728426096:AAHS6lLZ4JJivtd5B6FAHnVC7HSdX8lMVIQ";
-const TELEGRAM_BOT_TOKEN_V2="7717946510:AAETKEudKzvTfQlqmtQS-6RTcgPy-UM7-vE";
-// const DB_PATH = '/mnt/c/var/data/arbitrage.db';
 const DB_PATH = './data/arbitrage.db';
+// const TELEGRAM_BOT_TOKEN_V2="7717946510:AAETKEudKzvTfQlqmtQS-6RTcgPy-UM7-vE";
+// const DB_PATH = '/mnt/c/var/data/arbitrage.db';
 
 import { Telegraf, session } from 'telegraf';
 import { message } from 'telegraf/filters';
@@ -34,7 +33,6 @@ const positionInstance = {
     symbolHL : '',
     ratioHL:1, // ration for small k in symbolHL. kPEPE = 1000 PEPE and so on
 };
-
 class BotInstance {
     constructor(botToken) {
         if(BotInstance.instance) {
@@ -61,7 +59,6 @@ const options = {
     second: '2-digit',
     timeZoneName: 'short'
 };
-
 const _formatter = new Intl.DateTimeFormat('fr-FR', options);
 
 class FormatterDate {
@@ -454,7 +451,7 @@ bot.command('disconnect', async (ctx) => {
 });
 
 bot.command('position', async (ctx) => {
-    let [command, direction, coinHL, spotOrPerp, coinBB, delta, duration, targetUser] = ctx.message.text.split(' ');
+    let [command, direction, coinHL, spotOrPerp, coinBB, delta, duration] = ctx.message.text.split(' ');
     if (!direction || !coinHL || !spotOrPerp || !coinBB || !delta || !duration) {
         ctx.reply('Sorry, I did not understand the command. Please use\n/position [open/close] [coinHL] [spot/perp] [symbolBB] [delta] [duration]');
         return;
@@ -486,9 +483,6 @@ bot.command('position', async (ctx) => {
         ctx.reply('Sorry, I did not understand duration. Please use positive number');
         return;
     }
-    if(ctx.session.id !== ADMIN_ACCOUNT) {
-        targetUser = 0; // Forbid to set target user for non-admin users
-    }
 
     const pInstance = JSON.parse(JSON.stringify(positionInstance));
 
@@ -511,7 +505,7 @@ bot.command('position', async (ctx) => {
         await b.HL.connect()
         await b.BB.connect(pInstance.BYBIT_SPOT_OR_PERP);
 
-        if(!await setArbitragePosition(pInstance, targetUser?targetUser:ctx.session.id)) {
+        if(!await setArbitragePosition(pInstance, ctx.session.id)) {
             console.error(`${new Date().toISOString()}\t${ctx.session.id}\tFailed to setArbitragePosition: ${pInstance.symbolHL} vs ${pInstance.symbolBybit}`);
             ctx.reply(`Failed to setArbitragePosition: ${pInstance.symbolHL} vs ${pInstance.symbolBybit}`);
         }
