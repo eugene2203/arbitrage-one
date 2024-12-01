@@ -5,7 +5,7 @@ const WSS_HYPERLIQUID_URL="wss://api.hyperliquid.xyz/ws";
 class Hyperliquid {
   constructor(sessionId) {
     this.name = 'Hyperliquid';
-    this.sessionId = sessionId;
+    this.sessionId = sessionId || 0;
     this.ws = null;
     this.keepAlive = true;
     this.aliveTimer = 0;

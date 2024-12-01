@@ -8,7 +8,7 @@ const WSS_BYBIT_URL ={
 class Bybit {
   constructor(sessionId) {
     this.name = 'Bybit';
-    this.sessionId = sessionId;
+    this.sessionId = sessionId || 0;
     this.ws = {"SPOT": null, "PERP": null};
     this.keepAlive = {"SPOT": true, "PERP": true};
     this.aliveTimer = {"SPOT": 0, "PERP": 0};
