@@ -1,7 +1,7 @@
-const TELEGRAM_BOT_TOKEN_V1="7728426096:AAHS6lLZ4JJivtd5B6FAHnVC7HSdX8lMVIQ";
-const DB_PATH = './data/arbitrage.db';
-// const TELEGRAM_BOT_TOKEN_V2="7717946510:AAETKEudKzvTfQlqmtQS-6RTcgPy-UM7-vE";
-// const DB_PATH = '/mnt/c/var/data/arbitrage.db';
+// const TELEGRAM_BOT_TOKEN_V1="7728426096:AAHS6lLZ4JJivtd5B6FAHnVC7HSdX8lMVIQ";
+// const DB_PATH = './data/arbitrage.db';
+const TELEGRAM_BOT_TOKEN_V2="7717946510:AAETKEudKzvTfQlqmtQS-6RTcgPy-UM7-vE";
+const DB_PATH = '/mnt/c/var/data/arbitrage.db';
 
 import { Telegraf, session } from 'telegraf';
 import { message } from 'telegraf/filters';
@@ -12,6 +12,7 @@ import Database from 'better-sqlite3';
 
 import Hyperliquid  from './sources/hyperliquid.js';
 import Bybit from "./sources/bybit.js";
+import Mexc from "./sources/mexc.js";
 
 
 
@@ -25,6 +26,7 @@ const positionInstance = {
     startSuccessTime : 0,
     latestSuccessData : {start: null, duration:''}, // {start: '2021-10-10 10:10:10', duration: '10 min'} when we have the latest success
     positionVolume : 10000, // 10k USD
+
 
     symbolBybit : '',
     BYBIT_SPOT_OR_PERP : 'SPOT', // 'SPOT', 'PERP'
@@ -41,12 +43,13 @@ class BotInstance {
         this.bot = new Telegraf(botToken);
         this.HL = {};
         this.BB = {};
+        this.MX = {};
         this.monitoringPools = {};// { sessionId: {positionId: positionInstance }}
         BotInstance.instance =  this;
     }
 }
 
-const b = new BotInstance(TELEGRAM_BOT_TOKEN_V1);
+const b = new BotInstance(TELEGRAM_BOT_TOKEN_V2);
 const bot = b.bot;
 
 
@@ -88,8 +91,36 @@ bot.use((ctx, next) => {
         b.BB = new Bybit();
         console.log(`${new Date().toISOString()}\t${ctx.session.id}\tBotInstance Bybit created.`);
     }
+    if(!b.MX ||  !(typeof b.MX.connect === "function" )) {
+        b.MX = new Mexc();
+        console.log(`${new Date().toISOString()}\t${ctx.session.id}\tBotInstance Mexc created.`);
+    }
+    if(b.monitoringPools[ctx.session.id] === undefined) {
+        console.log(`${new Date().toISOString()}\t${ctx.session.id}\tMonitoring pool for ${ctx.session.id} created.`);
+        b.monitoringPools[ctx.session.id] = {};
+    }
     next();
 });
+
+bot.command('testtest', async (ctx) => {
+    await b.MX.connect('SPOT');
+    await b.MX.connect('PERP');
+    await b.MX.subscribe('BTCUSDT','SPOT');
+    await b.MX.subscribe('BTC_USDT','PERP');
+    setTimeout(async () => {
+        console.warn('Try to TEST Terminate SPOT');
+        await b.MX.terminate('SPOT');
+    }, 30000);
+    setTimeout(async () => {
+        console.warn('Try to TEST Terminate PERP');
+        await b.MX.terminate('PERP');
+    }, 45000);
+});
+
+
+
+
+
 
 /* Common functionality */
 const setMonitoringDelta = (delta, positionInstance) => {
@@ -307,11 +338,11 @@ const logToCSV = async (sessionId, positionInstance, data, isNew=false) => {
 }
 
 const getLogFiles = async (sessionId) => {
-    if(Object.keys(b.monitoringPools).length === 0) {
+    if(b.monitoringPools[sessionId] && Object.keys(b.monitoringPools[sessionId]).length === 0) {
         bot.telegram.sendMessage(sessionId,'No log files found');
         return;
     }
-    for ( const [positionId, positionInstance] of Object.entries(b.monitoringPools)) {
+    for ( const [positionId, positionInstance] of Object.entries(b.monitoringPools[sessionId])) {
         let HL_BB = (positionInstance.currentDirection === 'CLOSE')?['ask', 'bid'] : ['bid', 'ask'];
         const filename = `logs/arbitrage_${sessionId}_${positionInstance.currentDirection}_${positionInstance.symbolHL.toUpperCase()}_${positionInstance.BYBIT_SPOT_OR_PERP}_${positionInstance.symbolBybit.toUpperCase()}`;
         try {
@@ -389,7 +420,7 @@ const deleteFromMonitoringPool = (positionInstance, sessionId) => {
     }
 }
 const clearMonitoringPool = (sessionId) => {
-    Object.values(b.monitoringPools).map( (positionInstance) => {
+    Object.values(b.monitoringPools[sessionId]).map( (positionInstance) => {
         deleteFromMonitoringPool(positionInstance,sessionId);
     });
     try {
@@ -524,7 +555,7 @@ bot.command('stop_position', async (ctx) => {
         const _symbolHL = b.monitoringPools[positionId].symbolHL;
         let isExistSymbolBB = false;
         let isExistSymbolHL = false;
-        Object.values(b.monitoringPools).map((position) => {
+        Object.values(b.monitoringPools[ctx.session.id]).map((position) => {
             if(position.symbolBybit === _symbolBB && position.BYBIT_SPOT_OR_PERP === _marketBB) {
                 isExistSymbolBB = true;
             }
@@ -533,7 +564,7 @@ bot.command('stop_position', async (ctx) => {
             }
         });
 
-        deleteFromMonitoringPool(b.monitoringPools[positionId], ctx.session.id);
+        deleteFromMonitoringPool(b.monitoringPools[ctx.session.id][positionId], ctx.session.id);
         ctx.reply(`Position ${positionId} stopped.`);
     }
     else {
@@ -542,11 +573,11 @@ bot.command('stop_position', async (ctx) => {
 });
 
 bot.command('status', (ctx) => {
-    if(Object.keys(b.monitoringPools).length === 0) {
+    if(b.monitoringPools[ctx.session.id] && Object.keys(b.monitoringPools[ctx.session.id]).length === 0) {
         ctx.reply('No monitoring positions found.');
         return;
     }
-    for(const positionInstance of Object.values(b.monitoringPools)) {
+    for(const positionInstance of Object.values(b.monitoringPools[ctx.session.id])) {
         const data = (positionInstance.currentDirection !== '') ? calculateArbitrage(positionInstance.currentDirection,positionInstance): null;
         let str = '';
         if(data) {
