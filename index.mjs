@@ -108,21 +108,21 @@ bot.use((ctx, next) => {
 });
 
 
-bot.command('testtest', async (ctx) => {
-    b['BB'].setDebug(true);
-    await b['BB'].connect('PERP');
-    await b['BB'].subscribe('BTCUSDT','PERP');
-    await b['BB'].connect('SPOT');
-    await b['BB'].subscribe('BTCUSDT','SPOT');
-    setTimeout(async () => {
-        console.warn('Try to TEST Terminate PERP');
-        await b['BB'].terminate('PERP');
-    }, 20000);
+// bot.command('testtest', async (ctx) => {
+    // b['BB'].setDebug(true);
+    // await b['BB'].connect('PERP');
+    // await b['BB'].subscribe('BTCUSDT','PERP');
+    // await b['BB'].connect('SPOT');
+    // await b['BB'].subscribe('BTCUSDT','SPOT');
+    // setTimeout(async () => {
+    //     console.warn('Try to TEST Terminate PERP');
+    //     await b['BB'].terminate('PERP');
+    // }, 20000);
     // setTimeout(async () => {
     //     console.warn('Stop Debug HL PERP');
     //     await b['HL'].setDebug(false);
     // }, 40000);
-});
+// });
 
 
 /* Common functionality */
@@ -208,109 +208,6 @@ function calculateAskBidData(positionInstance) {
     return result;
 }
 
-// function calculateBybitData(positionInstance) {
-//     const _symbol = positionInstance.symbolBybit;
-//     const _market = positionInstance.BYBIT_SPOT_OR_PERP;
-//     const _snapshot = b.BB?.snapshots[_market][_symbol];
-//     // console.log(_market,_symbol,sessionInstance.BB.snapshots);
-//     let totalSumBybitAsk = 0;
-//     let totalVolumeBybitAsk = 0;
-//     let avgBybitAskPrice = 0;
-//
-//     let totalSumBybitBid = 0;
-//     let totalVolumeBybitBid = 0;
-//     let avgBybitBidPrice = 0;
-//
-//     if(_snapshot?.asks && _snapshot?.bids) {
-//         const asks = Object.entries(_snapshot.asks);
-//         const bids = Object.entries(_snapshot.bids);
-//
-//         for (const [price, data] of asks) {
-//             const deltaSum = data.amount * Number.parseFloat(price);
-//             if (totalSumBybitAsk + deltaSum >= positionInstance.positionVolume) {
-//                 const needSum = positionInstance.positionVolume - totalSumBybitAsk;
-//                 const needVolume = needSum / Number.parseFloat(price);
-//                 totalVolumeBybitAsk += needVolume;
-//                 totalSumBybitAsk += needSum;
-//                 avgBybitAskPrice = totalSumBybitAsk / totalVolumeBybitAsk;
-//                 break;
-//             } else {
-//                 totalVolumeBybitAsk += data.amount;
-//                 totalSumBybitAsk += deltaSum;
-//             }
-//         }
-//
-//         for (const [price, data] of bids) {
-//             const deltaSum = data.amount * Number.parseFloat(price);
-//             if (totalSumBybitBid + deltaSum >= positionInstance.positionVolume) {
-//                 const needSum = positionInstance.positionVolume - totalSumBybitBid;
-//                 const needVolume = needSum / Number.parseFloat(price);
-//                 totalVolumeBybitBid += needVolume;
-//                 totalSumBybitBid += needSum;
-//                 avgBybitBidPrice = totalSumBybitBid / totalVolumeBybitBid;
-//                 break;
-//             } else {
-//                 totalVolumeBybitBid += data.amount;
-//                 totalSumBybitBid += deltaSum;
-//             }
-//         }
-//     }
-//     return {
-//         avgAsk: avgBybitAskPrice,
-//         avgBid: avgBybitBidPrice,
-//         totalVolumeAsk: totalVolumeBybitAsk,
-//         totalVolumeBid: totalVolumeBybitBid
-//     };
-// }
-// function calculateHyperliquidData(positionInstance) {
-//     const _symbol = positionInstance.symbolHL;
-//     const _snapshot = b.HL?.snapshots[_symbol];
-//     let totalSumHLAsk = 0;
-//     let totalVolumeHLAsk = 0;
-//     let avgHLAskPrice = 0;
-//
-//     let totalSumHLBid = 0;
-//     let totalVolumeHLBid = 0;
-//     let avgHLBidPrice = 0;
-//
-//     if(_snapshot?.asks && _snapshot?.bids) {
-//
-//         const asks = Object.entries(_snapshot.asks);
-//         const bids = Object.entries(_snapshot.bids);
-//
-//         for (const [price, size] of asks) {
-//             const deltaSum = Number.parseFloat(price) * Number.parseFloat(size);
-//             if (totalSumHLAsk + deltaSum >= positionInstance.positionVolume) {
-//                 const needSum = positionInstance.positionVolume - totalSumHLAsk;
-//                 const needVolume = needSum / Number.parseFloat(price);
-//                 totalVolumeHLAsk += needVolume;
-//                 totalSumHLAsk += needSum;
-//                 avgHLAskPrice = totalSumHLAsk / totalVolumeHLAsk;
-//                 break;
-//             } else {
-//                 totalVolumeHLAsk += size;
-//                 totalSumHLAsk += deltaSum;
-//             }
-//         }
-//
-//         for (const [price, size] of bids) {
-//             const deltaSum = Number.parseFloat(price) * Number.parseFloat(size);
-//             if (totalSumHLBid + deltaSum >= positionInstance.positionVolume) {
-//                 const needSum = positionInstance.positionVolume - totalSumHLBid;
-//                 const needVolume = needSum / Number.parseFloat(price);
-//                 totalVolumeHLBid += needVolume;
-//                 totalSumHLBid += needSum;
-//                 avgHLBidPrice = totalSumHLBid / totalVolumeHLBid;
-//                 break;
-//             } else {
-//                 totalVolumeHLBid += size;
-//                 totalSumHLBid += deltaSum;
-//             }
-//         }
-//     }
-//
-//     return {avgAsk: avgHLAskPrice, avgBid: avgHLBidPrice, totalVolumeAsk: totalVolumeHLAsk, totalVolumeBid: totalVolumeHLBid};
-// }
 function calculateArbitrage(positionInstance) {
     const _prices = calculateAskBidData(positionInstance);
     const src1Prices = _prices.src1;
@@ -562,13 +459,23 @@ bot.start(async (ctx) => {
 });
 
 bot.command('help', (ctx) => {
-    ctx.reply('Available commands:\n' +
-      '/disconnect - close all positions and disconnect from CEX/DEX\n' +
-      '/position [src1] [market1] [symbol1] [ask/bid] [src2] [market2] [symbol2] [ask/bid] [volume] [delta] [duration] - create position for monitoring\n' +
-      '/stop_position [positionID] - stop position monitoring\n' +
-      '/status - show all positions with current statuses\n' +
-      '/logfile - provide log files for monitoring positions\n' +
-      '/help\n');
+    ctx.replyWithHTML('<u>Available commands</u>:\n' +
+      '<b>/disconnect</b> - close all positions and disconnect from CEX/DEX\n' +
+      '<b>/position [open/close] [src1] [symbol1] [src2] [market2] [symbol2] [delta?] [duration?] [volume?]</b> - create position for monitoring\n' +
+      ' src1 / src2 - one of HL, BB, MX\n'+
+      ' symbol1 / symbol2 - symbols in format of CEX/DEX. Possible to miss USDT suffix. For example use PEPE instead of PEPEUSDT\n'+
+      ' market2  - SPOT or PERP\n'+
+      ' delta  - optional. If missed use 0.05\n'+
+      ' doration  - optional. If missed use 10\n'+
+      ' volume  - optional. If missed use 10000\n'+
+      ' Possible to miss: volume or volume+duration or volume+duration+delta\n'+
+      'Examples:\n'+
+      'position open HL kPEPE BB PERP 1000PEPE 0.05\n'+
+      '<i>position close MX PEPE_USDT BB SPOT PEPEUSDT 0.05 10</i> the same as <i>position close MX PEPE BB SPOT PEPE</i>\n'+
+      '<b>/stop_position [positionID]</b> - stop position monitoring\n' +
+      '<b>/status</b> - show all positions with current statuses\n' +
+      '<b>/logfile</b> - provide log files for monitoring positions\n' +
+      '<b>/help</b>\n');
 });
 
 bot.command('disconnect', async (ctx) => {
