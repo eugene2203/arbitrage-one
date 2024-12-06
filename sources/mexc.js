@@ -12,6 +12,7 @@ class Mexc {
     this.ws = {"SPOT": null, "PERP": null};
     this.keepAlive = {"SPOT": true, "PERP": true};
     this.aliveTimer = {"SPOT": 0, "PERP": 0};
+    this.debug = false;
     /*
     * {
     *  "SPOT": {
@@ -47,8 +48,23 @@ class Mexc {
     this.keepAlive[market] = value;
   }
 
-  subscribe = (symbol, market) => {
+  setDebug(value) {
+    this.debug = value;
+  }
+
+  fixSymbol = (symbol_, market) => {
+    let symbol = symbol_;
+
+    if(!symbol_.includes('USDT')) {
+      symbol = market === 'SPOT'? symbol_ + 'USDT' : symbol_+'_USDT';
+    }
+    return symbol;
+  }
+
+
+  subscribe = (symbol_, market) => {
     return new Promise((resolve, reject) => {
+      const symbol = this.fixSymbol(symbol_, market);
       if(this.symbols[market] && this.symbols[market][symbol]?.subscribed === true) {
         resolve();
         return;
@@ -94,7 +110,8 @@ class Mexc {
     });
   }
 
-  unsubscribe = (symbol, market) => {
+  unsubscribe = (symbol_, market) => {
+    const symbol = this.fixSymbol(symbol_, market);
     this.snapshots[market] && delete this.snapshots[market][symbol];
     if(this.symbols[market][symbol]?.subscribed === true) {
       if(this.ws[market] && this.ws[market].readyState === WebSocket.OPEN) {
@@ -260,6 +277,11 @@ class Mexc {
     if(this.ws[market] && this.ws[market].readyState === WebSocket.OPEN) {
       this.ws[market].send(JSON.stringify({"method":"ping"}));
       for (const [symbol, data] of Object.entries(this.symbols[market])) {
+        if(this.debug) {
+          console.warn('_checkAlive '+this.name, symbol, data.cntMessages, data.lastMonitoredCntMessages);
+          console.warn('ASKS:', Object.entries(this.snapshots[market][symbol].asks).slice(0, 2));
+          console.warn('BIDS:', Object.entries(this.snapshots[market][symbol].bids).slice(0, 2));
+        }
         if (data.subscribed === true) {
           if(data.cntMessages > data.lastMonitoredCntMessages) {
             data.lastMonitoredCntMessages = data.cntMessages;

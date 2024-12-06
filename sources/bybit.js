@@ -12,6 +12,7 @@ class Bybit {
     this.ws = {"SPOT": null, "PERP": null};
     this.keepAlive = {"SPOT": true, "PERP": true};
     this.aliveTimer = {"SPOT": 0, "PERP": 0};
+    this.debug = false;
     /*
     * {
     *  "SPOT": {
@@ -47,7 +48,20 @@ class Bybit {
     this.keepAlive[market] = value;
   }
 
-  subscribe = (symbol, market) => {
+  setDebug(value) {
+    this.debug = value;
+  }
+
+  fixSymbol = (symbol_, market) => {
+    let symbol = symbol_;
+    if(!symbol_.includes('USDT')) {
+      symbol = market === 'SPOT'? symbol_ + 'USDT' : symbol_+'USDT';
+    }
+    return symbol;
+  }
+
+  subscribe = (symbol_, market) => {
+    const symbol = this.fixSymbol(symbol_, market);
     return new Promise((resolve, reject) => {
       if(this.symbols[market] && this.symbols[market][symbol]?.subscribed === true) {
         resolve();
@@ -83,7 +97,8 @@ class Bybit {
     });
   }
 
-  unsubscribe = (symbol, market) => {
+  unsubscribe = (symbol_, market) => {
+    const symbol = this.fixSymbol(symbol_, market);
     this.snapshots[market] && delete this.snapshots[market][symbol];
     if(this.symbols[market][symbol]?.subscribed === true) {
       if(this.ws[market] && this.ws[market].readyState === WebSocket.OPEN) {
@@ -102,7 +117,7 @@ class Bybit {
     });
   }
 
-  restore(market) {
+  restore = (market) => {
     if (this.ws[market] && this.ws[market].readyState === WebSocket.OPEN) {
       Object.keys(this.symbols[market]).map((symbol) => {
         if (this.symbols[market][symbol]?.subscribed === true) {
@@ -116,7 +131,7 @@ class Bybit {
     }
   }
 
-  connect(market) {
+  connect = (market) =>{
     return new Promise((resolve, reject) => {
       if(this.ws[market] && this.ws[market].readyState === WebSocket.OPEN) {
         resolve();
@@ -194,10 +209,10 @@ class Bybit {
             bids: {}
           }
           message.data.a.map((ask) => {
-            _snapshot.asks[ask[0]] = {amount: Number.parseFloat(ask[1]), sum: ask[0] * ask[1]}
+            _snapshot.asks[ask[0]] = Number.parseFloat(ask[1])
           });
           message.data.b.map((bid) => {
-            _snapshot.bids[bid[0]] = {amount: Number.parseFloat(bid[1]), sum: bid[0] * bid[1]}
+            _snapshot.bids[bid[0]] = Number.parseFloat(bid[1])
           });
           this.snapshots[market][_symbol] = _snapshot;
           console.log(`${new Date().toISOString()}\t${this.sessionId}\tBybit ${market} ${_symbol} SNAPSHOT received.`);
@@ -211,20 +226,20 @@ class Bybit {
               bids: {}
             }
             message.data.a.map((ask) => {
-              _delta.asks[ask[0]] = {amount: Number.parseFloat(ask[1]), sum: ask[0] * ask[1]}
+              _delta.asks[ask[0]] = Number.parseFloat(ask[1])
             });
             message.data.b.map((bid) => {
-              _delta.bids[bid[0]] = {amount: Number.parseFloat(bid[1]), sum: bid[0] * bid[1]}
+              _delta.bids[bid[0]] = Number.parseFloat(bid[1])
             });
             this.snapshots[market][_symbol].asks = {...this.snapshots[market][_symbol].asks, ..._delta.asks};
             this.snapshots[market][_symbol].bids = {...this.snapshots[market][_symbol].bids, ..._delta.bids};
-            for (const [price, data] of Object.entries(this.snapshots[market][_symbol].asks)) {
-              if (data.amount === 0) {
+            for (const [price, size] of Object.entries(this.snapshots[market][_symbol].asks)) {
+              if (size === 0) {
                 delete this.snapshots[market][_symbol].asks[price];
               }
             }
-            for (const [price, data] of Object.entries(this.snapshots[market][_symbol].bids)) {
-              if (data.amount === 0) {
+            for (const [price, size] of Object.entries(this.snapshots[market][_symbol].bids)) {
+              if (size === 0) {
                 delete this.snapshots[market][_symbol].bids[price];
               }
             }
@@ -248,6 +263,11 @@ class Bybit {
   _checkAlive = async (market) => {
     if(this.ws[market] && this.ws[market].readyState === WebSocket.OPEN) {
       for (const [symbol, data] of Object.entries(this.symbols[market])) {
+        if(this.debug) {
+          console.warn('_checkAlive '+this.name, symbol, data.cntMessages, data.lastMonitoredCntMessages);
+          console.warn('ASKS:', Object.entries(this.snapshots[market][symbol].asks).slice(0, 2));
+          console.warn('BIDS:', Object.entries(this.snapshots[market][symbol].bids).slice(0, 2));
+        }
         if (data.subscribed === true) {
           if(data.cntMessages > data.lastMonitoredCntMessages) {
             data.lastMonitoredCntMessages = data.cntMessages;
