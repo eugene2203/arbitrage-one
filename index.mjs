@@ -27,7 +27,7 @@ const positionInstance = {
     timer : 0,
     MONITORING_INTERVAL : 10000, // 10 seconds
     MONITORING_DELTA : 0.05, // 0.05%
-    targetSuccessTime : 10*60*1000, // 10 min
+    targetSuccessTime : 1*60*1000, // 10 min
     currentDirection : '',
     startSuccessTime : 0,
     latestSuccessData : {start: null, duration:''}, // {start: '2021-10-10 10:10:10', duration: '10 min'} when we have the latest success
@@ -466,7 +466,7 @@ bot.command('help', (ctx) => {
       ' symbol1 / symbol2 - symbols in format of CEX/DEX. Possible to miss USDT suffix. For example use PEPE instead of PEPEUSDT\n'+
       ' market2  - SPOT or PERP\n'+
       ' delta  - optional. If missed use 0.05\n'+
-      ' doration  - optional. If missed use 10\n'+
+      ' doration  - optional. If missed use 1\n'+
       ' volume  - optional. If missed use 10000\n'+
       ' Possible to miss: volume or volume+duration or volume+duration+delta\n'+
       'Examples:\n'+
@@ -520,18 +520,18 @@ bot.command('position', async (ctx) => {
     }
     else {
         volume = Number.parseInt(volume);
-        if (!volume || volume <= 0) {
+        if (isNaN(volume) || volume <= 0) {
             ctx.reply('Sorry, I did not understand Volume. Please use positive number');
             return;
         }
     }
 
-    if(!delta) {
+    if(delta === undefined) {
         delta = positionInstance.MONITORING_DELTA;
     }
     else {
         delta = Number.parseFloat(delta);
-        if (!delta) {
+        if (isNaN(delta)) {
             ctx.reply('Sorry, I did not understand delta. Please use positive number');
             return;
         }
