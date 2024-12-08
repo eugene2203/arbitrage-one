@@ -281,7 +281,8 @@ const clearAllPositionData = (positionId, sessionId) => {
 const monitorAction = async (positionInstance, sessionId) => {
     const data = calculateArbitrage(positionInstance);
     if(!data) return;
-    let Ask_Bid = (positionInstance.src1AskBid === 'ASK')?['ask', 'bid'] : ['bid', 'ask'];
+    const Ask_Bid = (positionInstance.positionDirection === 'OPEN')? ['bid','ask'] : ['ask', 'bid'];
+    const Sell_Buy = (positionInstance.positionDirection === 'OPEN')? ['Sell','Buy'] : ['Buy', 'Sell'];
     const isSuccessful = data['src1_'+Ask_Bid[0]] && data['src2_'+Ask_Bid[1]] && data.delta >= positionInstance.MONITORING_DELTA;
     const result = (isSuccessful)?'| SUCCESS':'';
     console.log(`${new Date().toISOString()}\t${sessionId}\t${positionInstance.positionId} | Delta: ${data.delta}% ${result}`);
@@ -295,10 +296,12 @@ const monitorAction = async (positionInstance, sessionId) => {
             positionInstance.latestSuccessData.duration = `${Math.round((new Date().getTime()-positionInstance.startSuccessTime)/1000/60*10)/10} min`;
         }
         if(new Date().getTime()-positionInstance.startSuccessTime > positionInstance.targetSuccessTime) {
-            bot.telegram.sendMessage(sessionId,`Position ID: <b>${positionInstance.positionId}</b>\n`+
-              `${positionInstance.src1} ${positionInstance.src1Market} <u>${positionInstance.src1Symbol}</u> ${positionInstance.src1AskBid} ${Ask_Bid[0]}:<b>${data['src1_'+Ask_Bid[0]]}</b>\n`+
-              `${positionInstance.src2} ${positionInstance.src2Market} <u>${positionInstance.src2Symbol}</u> ${positionInstance.src2AskBid} ${Ask_Bid[1]}: <b>${data['src2_'+Ask_Bid[1]]}</b>\n`+
-              `Delta: <b>${data.delta}%</b>`, {parse_mode: 'HTML'});
+            // OPEN position = Sell Src1 PERP (open short perp position) + Buy Src2 PERP/SPOT
+            // CLOSE position = Sell Src2 PERP/SPOT + Buy back Src1 PERP (close short perp position)
+            bot.telegram.sendMessage(sessionId,`Position ID: <b>${positionInstance.positionId}</b>\n\n`+
+              `<u><b>${Sell_Buy[0]}</b></u> ${positionInstance.src1Symbol} on ${positionInstance.src1} ${positionInstance.src1Market}\n`+
+              `<u><b>${Sell_Buy[1]}</b></u> ${positionInstance.src2Symbol} on ${positionInstance.src2} ${positionInstance.src2Market}\n`+
+              `Spread: <b>${data.delta}%</b>`, {parse_mode: 'HTML'});
         }
     }
     else {
