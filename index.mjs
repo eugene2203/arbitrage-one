@@ -642,14 +642,14 @@ bot.command('status', (ctx) => {
         if(data) {
             str =
               `<b>${positionInstance.src1} <u>${positionInstance.src1Market}</u></b> <b>${positionInstance.src1Symbol} <u>${positionInstance.src1AskBid}</u></b>\n`+
-              `<b>${positionInstance.src2} <u>${positionInstance.src1Market}</u></b> <b>${positionInstance.src1Symbol} <u>${positionInstance.src1AskBid}</u></b>.\n` +
-              `delta: <b>${data.delta}</b>% / Target: <b>${positionInstance.MONITORING_DELTA}</b>%\n`
+              `<b>${positionInstance.src2} <u>${positionInstance.src2Market}</u></b> <b>${positionInstance.src2Symbol} <u>${positionInstance.src2AskBid}</u></b>.\n` +
+              `Spread: <b>${data.delta}</b>% / Target: <b>${positionInstance.MONITORING_DELTA}</b>%\n`
             const _d = positionInstance.latestSuccessData.start ? formatter.format(positionInstance.latestSuccessData.start) : 'Never';
             ctx.replyWithHTML(`<b><u>Status:</u></b>\n`+
-              `Position ID: <b>${positionInstance.positionId}</b>\n`+
               `${str}\n`+
               `Latest success: <b>${_d}</b>\n`+
-              `Duration: <b>${positionInstance.latestSuccessData.duration || '0 min'}</b> of <b>${positionInstance.targetSuccessTime/1000/60} min</b>`);
+              `Duration: <b>${positionInstance.latestSuccessData.duration || '0 min'}</b> of <b>${positionInstance.targetSuccessTime/1000/60} min</b>\n\n`+
+              `Position ID: ${positionInstance.positionId}`);
         }
     }
 });
