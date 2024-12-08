@@ -298,10 +298,10 @@ const monitorAction = async (positionInstance, sessionId) => {
         if(new Date().getTime()-positionInstance.startSuccessTime > positionInstance.targetSuccessTime) {
             // OPEN position = Sell Src1 PERP (open short perp position) + Buy Src2 PERP/SPOT
             // CLOSE position = Sell Src2 PERP/SPOT + Buy back Src1 PERP (close short perp position)
-            bot.telegram.sendMessage(sessionId,`Position ID: <b>${positionInstance.positionId}</b>\n\n`+
-              `<u><b>${Sell_Buy[0]}</b></u> ${positionInstance.src1Symbol} on ${positionInstance.src1} ${positionInstance.src1Market}\n`+
+            bot.telegram.sendMessage(sessionId,`<u><b>${Sell_Buy[0]}</b></u> ${positionInstance.src1Symbol} on ${positionInstance.src1} ${positionInstance.src1Market}\n`+
               `<u><b>${Sell_Buy[1]}</b></u> ${positionInstance.src2Symbol} on ${positionInstance.src2} ${positionInstance.src2Market}\n`+
-              `Spread: <b>${data.delta}%</b>`, {parse_mode: 'HTML'});
+              `Spread: <b>${data.delta}%</b>\n\n`+
+              `Position ID: ${positionInstance.positionId}`, {parse_mode: 'HTML'});
         }
     }
     else {
@@ -535,17 +535,17 @@ bot.command('position', async (ctx) => {
     else {
         delta = Number.parseFloat(delta);
         if (isNaN(delta)) {
-            ctx.reply('Sorry, I did not understand delta. Please use positive number');
+            ctx.reply('Sorry, I did not understand spread. Please use positive number');
             return;
         }
     }
 
-    if(!duration) {
+    if(duration === undefined) {
         duration = positionInstance.targetSuccessTime / 1000 / 60;
     }
     else {
         duration = Number.parseInt(duration);
-        if (!duration || duration <= 0) {
+        if (isNaN(duration) || duration < 0) {
             ctx.reply('Sorry, I did not understand duration. Please use positive number');
             return;
         }
@@ -611,15 +611,24 @@ const getRatio = (source, symbol) => {
     return ratio;
 }
 
-bot.command('stop_position', async (ctx) => {
-    let positionId = ctx.message.text.split(' ')[1]?.trim();
-    if(positionId && b.monitoringPools[ctx.session.id][positionId]) {
-        deleteFromMonitoringPool(b.monitoringPools[ctx.session.id][positionId], ctx.session.id);
-        ctx.reply(`Position ${positionId} stopped.`);
+const stopPositionByID = (positionId, sessionId) => {
+    if(positionId && b.monitoringPools[sessionId][positionId]) {
+        deleteFromMonitoringPool(b.monitoringPools[sessionId][positionId], sessionId);
+        bot.telegram.sendMessage(sessionId, `Position ${positionId} stopped.`);
     }
     else {
-        ctx.reply(`Position ${positionId} not found.`);
+        bot.telegram.sendMessage(sessionId, `Position ${positionId} not found.`);
     }
+}
+
+bot.command('stop_position', async (ctx) => {
+    const buttons = Object.values(b.monitoringPools[ctx.session.id]).map((position) => [
+      {
+          text: `${position.positionDirection}: ${position.src1} ${position.src1Symbol} vs ${position.src2} ${position.src2Market} ${position.src2Symbol}`,
+          callback_data: `${position.positionId}:${ctx.session.id}`
+      },
+    ]);
+    ctx.reply('Select the position to be stopped:', { reply_markup: { inline_keyboard: buttons } });
 });
 
 bot.command('status', (ctx) => {
@@ -653,7 +662,15 @@ bot.on(message('text'), async (ctx) => {
     ctx.reply('Sorry, I did not understand that command. Type /help to see available commands.');
 });
 
-
+bot.on('callback_query', (ctx) => {
+    const [positionId, sessionId] = ctx.callbackQuery.data.split(':');
+    if (!isNaN(sessionId) && positionId.length > 0) {
+        stopPositionByID(positionId, sessionId);
+    }
+    else {
+        console.error(`${new Date().toISOString()}\t0\tError callback_query: ${ctx.callbackQuery}`);
+    }
+});
 
 
 
