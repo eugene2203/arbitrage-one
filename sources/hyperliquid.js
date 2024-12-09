@@ -41,6 +41,9 @@ class Hyperliquid {
 
   subscribe(coin, market='PERP') {
     return new Promise((resolve, reject) => {
+      if(market === 'SPOT') {
+        reject(`Can't subscribe to Hyperliquid ${market} ${coin}. SPOT market is not supported.`);
+      }
       if (this.coins[market][coin]?.subscribed === true) {
         resolve();
         return;
@@ -138,6 +141,9 @@ class Hyperliquid {
 
   connect = (market='PERP') => {
     return new Promise((resolve, reject) => {
+      if(market === 'SPOT') {
+        reject(`Can't connect to Hyperliquid ${market}. ${market} market is not supported.`);
+      }
       if(this.ws[market] && this.ws[market].readyState === WebSocket.OPEN) {
         resolve();
         return;
