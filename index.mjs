@@ -13,11 +13,13 @@ import Database from 'better-sqlite3';
 import Hyperliquid  from './sources/hyperliquid.js';
 import Bybit from "./sources/bybit.js";
 import Mexc from "./sources/mexc.js";
+import Binance from "./sources/binance.js";
 
 const dataSources = {
     'HL':Hyperliquid,
     'BB':Bybit,
-    'MX':Mexc
+    'MX':Mexc,
+    'BN':Binance
 };
 
 const dataSourceKeys = Object.keys(dataSources);
@@ -144,8 +146,6 @@ function calculateAskBidData(positionInstance) {
         const _market = positionInstance[`src${index}Market`];
         // index===2 && console.warn(_symbol, _market, positionInstance[`src${index}`]);
         const _snapshot = b[positionInstance[`src${index}`]]?.snapshots[_market][_symbol];
-        const dbgKeysAsks = Object.keys(_snapshot.asks);
-        const dbgKeysBids = Object.keys(_snapshot.bids);
 
         let totalSumAsk = 0;
         let totalVolumeAsk = 0;
@@ -671,7 +671,6 @@ bot.on('callback_query', (ctx) => {
         console.error(`${new Date().toISOString()}\t0\tError callback_query: ${ctx.callbackQuery}`);
     }
 });
-
 
 
 
