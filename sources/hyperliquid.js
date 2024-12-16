@@ -45,6 +45,7 @@ class Hyperliquid {
         reject(`Can't subscribe to Hyperliquid ${market} ${coin}. SPOT market is not supported.`);
       }
       if (this.coins[market][coin]?.subscribed === true) {
+        this.debug && console.log(`${new Date().toISOString()}\t${this.sessionId}\tHyperliquid ${market} ${coin} already subscribed.`);
         resolve();
         return;
       }
@@ -63,6 +64,7 @@ class Hyperliquid {
             "type": "l2Book"
           }
         }));
+        this.debug && console.log(`${new Date().toISOString()}\t${this.sessionId}\tHyperliquid ${market} try to subscribe to ${coin}`);
         let _tmr = setInterval(() => {
           if(this.coins[market][coin]?.subscribed === true) {
             clearInterval(_tmr);
@@ -120,19 +122,14 @@ class Hyperliquid {
     this.snapshots[market] = {};
   }
 
-  restore(market='PERP') {
+  async restore(market='PERP') {
     if (this.ws[market] && this.ws[market].readyState === WebSocket.OPEN) {
-      Object.keys(this.coins[market]).map((coin) => {
+      for(const coin of Object.keys(this.coins[market])) {
         if (this.coins[market][coin]?.subscribed === true) {
-          this.ws[market].send(JSON.stringify({
-            "method": "subscribe",
-            "subscription": {
-              "coin": coin,
-              "type": "l2Book"
-            }
-          }));
+          this.coins[market][coin].subscribed = false;
+          await this.subscribe(coin, market);
         }
-      });
+      }
     }
     else {
       setTimeout(this.restore,100, market);
@@ -145,6 +142,7 @@ class Hyperliquid {
         reject(`Can't connect to Hyperliquid ${market}. ${market} market is not supported.`);
       }
       if(this.ws[market] && this.ws[market].readyState === WebSocket.OPEN) {
+        this.debug && console.log(`${new Date().toISOString()}\t${this.sessionId}\tHyperliquid ${market} WebSocket is already connected.`);
         resolve();
         return;
       }
@@ -215,6 +213,7 @@ class Hyperliquid {
       if(this.coins[market][message.data.subscription.coin]?.subscribed === false) {
         this.coins[market][message.data.subscription.coin].subscribed = true;
         this.coins[market][message.data.subscription.coin].cntMessages = 0;
+        this.coins[market][message.data.subscription.coin].lastMonitoredCntMessages = 0;
         this.snapshots[market][message.data.subscription.coin] = {
           timestamp: new Date(),
           asks: {},
@@ -276,9 +275,7 @@ class Hyperliquid {
         }
         if (data.subscribed === true) {
           if(data.cntMessages > data.lastMonitoredCntMessages) {
-            // this.debug && console.warn('Before update:', data.lastMonitoredCntMessages, data.cntMessages)
             data.lastMonitoredCntMessages = data.cntMessages;
-            // this.debug && console.warn('After update:', data.lastMonitoredCntMessages, data.cntMessages)
           }
           else {
             // we have a problem with this symbol. Maybe stuck or disconnected. Need to reconnect and resubscribe
