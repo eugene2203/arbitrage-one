@@ -3,7 +3,7 @@ const DB_PATH = './data/arbitrage.db';
 // const TELEGRAM_BOT_TOKEN_V2="7717946510:AAETKEudKzvTfQlqmtQS-6RTcgPy-UM7-vE";
 // const DB_PATH = '/mnt/c/var/data/arbitrage.db';
 
-import { Telegraf, session } from 'telegraf';
+import { Telegraf, session, Markup } from 'telegraf';
 import { message } from 'telegraf/filters';
 import fsPromises from 'node:fs/promises';
 import fs from 'node:fs';
@@ -458,7 +458,12 @@ const restorePositions = async () => {
 
 // Command section
 bot.start(async (ctx) => {
-    ctx.replyWithHTML(`Hi <u>${ctx.session.username}</u>!\nWelcome to <b>ivnArbitrageBot</b>!\nYour ID: ${ctx.session.id}\n${formatter.format(new Date())}`);
+    ctx.replyWithHTML(`Hi <u>${ctx.session.username}</u>!\nWelcome to <b>Spread_Arbitrage_Turtle_bot</b>!\nYour ID: ${ctx.session.id}\n${formatter.format(new Date())}`,
+      Markup.keyboard([
+        ['Statuses', 'Logfiles'],
+        ['Stop position', 'Stop all']
+      ]).resize().oneTime(false).selective(false)
+    );
 });
 
 bot.command('help', (ctx) => {
@@ -479,6 +484,10 @@ bot.command('help', (ctx) => {
       '<b>/status</b> - show all positions with current statuses\n' +
       '<b>/logfile</b> - provide log files for monitoring positions\n' +
       '<b>/help</b>\n');
+});
+
+bot.hears('Stop all', (ctx) => {
+    clearMonitoringPool(ctx.session.id);
 });
 
 bot.command('disconnect', async (ctx) => {
@@ -621,17 +630,26 @@ const stopPositionByID = (positionId, sessionId) => {
     }
 }
 
-bot.command('stop_position', async (ctx) => {
+const commandStopPosition = async (ctx) => {
     const buttons = Object.values(b.monitoringPools[ctx.session.id]).map((position) => [
-      {
-          text: `${position.positionDirection}: ${position.src1} ${position.src1Symbol} vs ${position.src2} ${position.src2Market} ${position.src2Symbol}`,
-          callback_data: `${position.positionId}:${ctx.session.id}`
-      },
+        {
+            text: `${position.positionDirection}: ${position.src1} ${position.src1Symbol} vs ${position.src2} ${position.src2Market} ${position.src2Symbol}`,
+            callback_data: `${position.positionId}:${ctx.session.id}`
+        },
     ]);
     ctx.reply('Select the position to be stopped:', { reply_markup: { inline_keyboard: buttons } });
+}
+
+bot.hears('Stop position', async (ctx) => {
+    await commandStopPosition(ctx);
 });
 
-bot.command('status', (ctx) => {
+bot.command('stop_position', async (ctx) => {
+    await commandStopPosition(ctx);
+});
+
+
+const commandStatus = (ctx) => {
     if(b.monitoringPools[ctx.session.id] && Object.keys(b.monitoringPools[ctx.session.id]).length === 0) {
         ctx.reply('No monitoring positions found.');
         return;
@@ -652,6 +670,19 @@ bot.command('status', (ctx) => {
               `Position ID: ${positionInstance.positionId}`);
         }
     }
+}
+
+bot.hears('Statuses', (ctx) => {
+    commandStatus(ctx);
+});
+
+bot.command('status', (ctx) => {
+    commandStatus(ctx);
+});
+
+
+bot.hears('Logfiles', async (ctx) => {
+    await getLogFiles(ctx.session.id);
 });
 
 bot.command('logfile', async (ctx) => {
