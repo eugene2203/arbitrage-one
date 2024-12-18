@@ -110,21 +110,9 @@ bot.use((ctx, next) => {
 });
 
 
-// bot.command('testtest', async (ctx) => {
-    // b['BB'].setDebug(true);
-    // await b['BB'].connect('PERP');
-    // await b['BB'].subscribe('BTCUSDT','PERP');
-    // await b['BB'].connect('SPOT');
-    // await b['BB'].subscribe('BTCUSDT','SPOT');
-    // setTimeout(async () => {
-    //     console.warn('Try to TEST Terminate PERP');
-    //     await b['BB'].terminate('PERP');
-    // }, 20000);
-    // setTimeout(async () => {
-    //     console.warn('Stop Debug HL PERP');
-    //     await b['HL'].setDebug(false);
-    // }, 40000);
-// });
+bot.command('testtest', async (ctx) => {
+    console.log('testtest', await b['HL'].getFundingRatesAfter0Level('ETH'));
+});
 
 
 /* Common functionality */
@@ -298,9 +286,18 @@ const monitorAction = async (positionInstance, sessionId) => {
         if(new Date().getTime()-positionInstance.startSuccessTime > positionInstance.targetSuccessTime) {
             // OPEN position = Sell Src1 PERP (open short perp position) + Buy Src2 PERP/SPOT
             // CLOSE position = Sell Src2 PERP/SPOT + Buy back Src1 PERP (close short perp position)
-            bot.telegram.sendMessage(sessionId,`<u><b>${Sell_Buy[0]}</b></u> ${positionInstance.src1Symbol} on ${positionInstance.src1} ${positionInstance.src1Market}\n`+
+
+            let strFunding = '';
+            if(positionInstance.src1 === 'HL') {
+                const oFunding = await b[positionInstance.src1].getFundingRatesAfter0Level(positionInstance.src1Symbol);
+                if(oFunding?.hours && oFunding?.fundingRate) {
+                    strFunding = `<b>Funding</b> for latest <b>${oFunding.hours}</b> hours = <b><u>${oFunding.fundingRate}</u></b>%\n`;
+                }
+            }
+            bot.telegram.sendMessage(sessionId,
+          `<u><b>${Sell_Buy[0]}</b></u> ${positionInstance.src1Symbol} on ${positionInstance.src1} ${positionInstance.src1Market}\n`+
               `<u><b>${Sell_Buy[1]}</b></u> ${positionInstance.src2Symbol} on ${positionInstance.src2} ${positionInstance.src2Market}\n`+
-              `Spread: <b>${data.delta}%</b>\n\n`+
+              `<b>Spread: ${data.delta}%</b>\n${strFunding}\n`+
               `Position ID: ${positionInstance.positionId}`, {parse_mode: 'HTML'});
         }
     }
@@ -649,7 +646,7 @@ bot.command('stop_position', async (ctx) => {
 });
 
 
-const commandStatus = (ctx) => {
+const commandStatus = async (ctx) => {
     if(b.monitoringPools[ctx.session.id] && Object.keys(b.monitoringPools[ctx.session.id]).length === 0) {
         ctx.reply('No monitoring positions found.');
         return;
@@ -661,7 +658,13 @@ const commandStatus = (ctx) => {
             str =
               `<b>${positionInstance.src1} <u>${positionInstance.src1Market}</u></b> <b>${positionInstance.src1Symbol} <u>${positionInstance.src1AskBid}</u></b>\n`+
               `<b>${positionInstance.src2} <u>${positionInstance.src2Market}</u></b> <b>${positionInstance.src2Symbol} <u>${positionInstance.src2AskBid}</u></b>.\n` +
-              `Spread: <b>${data.delta}</b>% / Target: <b>${positionInstance.MONITORING_DELTA}</b>%\n`
+              `<b>Spread: ${data.delta}</b>% / Target: <b>${positionInstance.MONITORING_DELTA}</b>%\n`
+            if(positionInstance.src1 === 'HL') {
+                const oFunding = await b[positionInstance.src1].getFundingRatesAfter0Level(positionInstance.src1Symbol);
+                if(oFunding?.hours && oFunding?.fundingRate) {
+                    str += `<b>Funding</b> for latest <b>${oFunding.hours}</b> hours = <b><u>${oFunding.fundingRate}</u></b>%\n`;
+                }
+            }
             const _d = positionInstance.latestSuccessData.start ? formatter.format(positionInstance.latestSuccessData.start) : 'Never';
             ctx.replyWithHTML(`<b><u>Status:</u></b>\n`+
               `${str}\n`+
@@ -672,12 +675,12 @@ const commandStatus = (ctx) => {
     }
 }
 
-bot.hears('Statuses', (ctx) => {
-    commandStatus(ctx);
+bot.hears('Statuses', async (ctx) => {
+    await commandStatus(ctx);
 });
 
-bot.command('status', (ctx) => {
-    commandStatus(ctx);
+bot.command('status', async (ctx) => {
+    await commandStatus(ctx);
 });
 
 

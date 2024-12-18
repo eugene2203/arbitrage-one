@@ -1,6 +1,11 @@
 import WebSocket from "ws";
 
 const WSS_HYPERLIQUID_URL="wss://api.hyperliquid.xyz/ws";
+const REST_INFO_HYPERLIQUID_URL="https://api.hyperliquid.xyz/info";
+
+const HL_API_PK="0xa1cf160826c164a6da224b228a2c0e840e05ee227b39eefbfc35748e5bfb59b1";
+
+const ZERO_LEVELS_REVERSE = [16, 8, 0];
 
 class Hyperliquid {
   constructor(sessionId) {
@@ -24,6 +29,49 @@ class Hyperliquid {
     * { "kPEPE": { subscribed: true | false } }
     * */
     this.coins = {'PERP':{}, 'SPOT':{}};
+  }
+
+  getFundingRatesAfter0Level = async (coin, market='PERP') => {
+    const dt = new Date();
+    const dtStartDay = new Date(dt);
+    dtStartDay.setHours(0,0,0,0);
+    // console.log('dtStartDay', new Date(dtStartDay));
+    // console.log('dt', dt);
+    let dtStartFundingPeriod = dtStartDay;
+    for(const hours of ZERO_LEVELS_REVERSE) {
+      if(dt.getTime() > dtStartDay.getTime() + hours * 60 * 60 * 1000) {
+        dtStartFundingPeriod = dtStartDay.getTime() + hours * 60 * 60 * 1000 + 10*60*1000; // Start Funding period 10 minutes after the zero level
+        break;
+      }
+    }
+    // console.log('dtStartFundingPeriod', new Date(dtStartFundingPeriod));
+
+    try {
+      const response = await fetch(REST_INFO_HYPERLIQUID_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          "type": "fundingHistory",
+          "coin": coin,
+          "startTime": dtStartFundingPeriod,
+        })
+      });
+      const data = await response.json();
+      // console.log(data);
+      let fundingSum = 0;
+      if (data && Array.isArray(data)) {
+        fundingSum = data.reduce((acc, obj) => {
+          return acc + Number.parseFloat(obj.fundingRate)
+        }, 0);
+      }
+      return { hours: data.length, fundingRate: Math.round(fundingSum*100000000)/100000000 };
+    }
+    catch (e) {
+      console.error(`${new Date().toISOString()}\t${this.sessionId}\tHyperliquid ${market} getFundingRatesLast8h error:`, e.message);
+      return null;
+    }
   }
 
   setKeepAlive(value, market='PERP') {
