@@ -66,7 +66,7 @@ class Hyperliquid {
           return acc + Number.parseFloat(obj.fundingRate)
         }, 0);
       }
-      return { hours: data.length, fundingRate: Math.round(fundingSum*1000000)/1000000 };
+      return { hours: data.length, fundingRate: Math.round(fundingSum*100000000)/1000000 };
     }
     catch (e) {
       console.error(`${new Date().toISOString()}\t${this.sessionId}\tHyperliquid ${market} getFundingRatesLast8h error:`, e.message);
