@@ -659,7 +659,8 @@ const commandStatus = async (ctx) => {
               `<b>${positionInstance.src1} <u>${positionInstance.src1Market}</u></b> <b>${positionInstance.src1Symbol} <u>${positionInstance.src1AskBid}</u></b>\n`+
               `<b>${positionInstance.src2} <u>${positionInstance.src2Market}</u></b> <b>${positionInstance.src2Symbol} <u>${positionInstance.src2AskBid}</u></b>.\n` +
               `<b>Spread: ${data.delta}</b>% / Target: <b>${positionInstance.MONITORING_DELTA}</b>%\n`
-            if(positionInstance.src1 === 'HL' && positionInstance.positionDirection === 'CLOSE') {
+            // console.warn(positionInstance.src1, positionInstance.positionDirection);
+            if(positionInstance.src1 === 'HL' && positionInstance.src1Market === 'PERP' && positionInstance.positionDirection === 'CLOSE') {
                 const oFunding = await b[positionInstance.src1].getFundingRatesAfter0Level(positionInstance.src1Symbol);
                 if(oFunding?.hours && oFunding?.fundingRate) {
                     str += `<b>Funding</b> for latest <b>${oFunding.hours}</b> hours = <b><u>${oFunding.fundingRate}</u></b>%\n`;
