@@ -1,26 +1,12 @@
-const TELEGRAM_BOT_TOKEN_V1="7728426096:AAHS6lLZ4JJivtd5B6FAHnVC7HSdX8lMVIQ";
-const DB_PATH = './data/arbitrage.db';
-// const TELEGRAM_BOT_TOKEN_V2="7717946510:AAETKEudKzvTfQlqmtQS-6RTcgPy-UM7-vE";
-// const DB_PATH = '/mnt/c/var/data/arbitrage.db';
-
 import { Telegraf, session, Markup } from 'telegraf';
 import { message } from 'telegraf/filters';
 import fsPromises from 'node:fs/promises';
 import fs from 'node:fs';
 import { spawn } from 'node:child_process';
-import Database from 'better-sqlite3';
 
-import Hyperliquid  from './sources/hyperliquid.js';
-import Bybit from "./sources/bybit.js";
-import Mexc from "./sources/mexc.js";
-import Binance from "./sources/binance.js";
-
-const dataSources = {
-    'HL':Hyperliquid,
-    'BB':Bybit,
-    'MX':Mexc,
-    'BN':Binance
-};
+import { dataSources, TELEGRAM_BOT_TOKEN, ADMIN_IDS } from './utils/config.js';
+import { addPositionToDb, deletePositionFromDb, deleteAllPositionsFromDb, selectAllPositionsFromDb } from './utils/db.js';
+import { formatter } from './utils/utils.js';
 
 const dataSourceKeys = Object.keys(dataSources);
 
@@ -48,6 +34,7 @@ const positionInstance = {
     src2Ratio:1, // ration for 1000 in symbolBB. 1000PEPE = 1000 PEPE and so on, SHIB1000 = 1000 SHIB
     src2AskBid : '', // 'ask' or 'bid'
 };
+
 class BotInstance {
     constructor(botToken) {
         if(BotInstance.instance) {
@@ -62,30 +49,8 @@ class BotInstance {
     }
 }
 
-const b = new BotInstance(TELEGRAM_BOT_TOKEN_V1);
+const b = new BotInstance(TELEGRAM_BOT_TOKEN);
 const bot = b.bot;
-
-
-const options = {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    timeZoneName: 'short'
-};
-const _formatter = new Intl.DateTimeFormat('fr-FR', options);
-
-class FormatterDate {
-
-    format(date) {
-        return _formatter.format(date).replace(',','');
-    }
-}
-const formatter = new FormatterDate();
-
-const db = new Database(DB_PATH);
 
 
 bot.use(session());
@@ -110,9 +75,9 @@ bot.use((ctx, next) => {
 });
 
 
-bot.command('testtest', async (ctx) => {
-    console.log('testtest', await b['HL'].getFundingRatesAfter0Level('ETH'));
-});
+// bot.command('testtest', async (ctx) => {
+//     console.log('testtest', await b['HL'].getFundingRatesAfter0Level('ETH'));
+// });
 
 
 /* Common functionality */
@@ -231,7 +196,7 @@ const setArbitragePosition = async (positionInstance, sessionId=0) => {
         await b[positionInstance.src2].subscribe(positionInstance.src2Symbol, positionInstance.src2Market);
     }
     catch (e) {
-        clearAllPositionData(positionInstance.positionId, sessionId);
+        // clearAllPositionData(positionInstance.positionId, sessionId);
         console.error(`${new Date().toISOString()}\t${sessionId}\tError subscribing to ${positionInstance.positionId}. Error:${e.message}`,e);
         return false;
     }
@@ -328,6 +293,7 @@ const getLogFiles = async (sessionId) => {
         bot.telegram.sendMessage(sessionId,'No log files found');
         return;
     }
+    let counter = 0;
     for ( const [positionId, positionInstance] of Object.entries(b.monitoringPools[sessionId])) {
         let _ask_bid = (positionInstance.positionDirection === 'OPEN')?['bid', 'ask'] : ['ask', 'bid'];
         const filename = `logs/arbitrage_${sessionId}_${positionInstance.positionDirection}_${positionInstance.positionId}`;
@@ -360,7 +326,9 @@ const getLogFiles = async (sessionId) => {
             bot.telegram.sendMessage(sessionId,`Can't provide log file for ${positionId}: ${e.message || e}`, {parse_mode: 'HTML'});
             continue;
         }
-        bot.telegram.sendDocument(sessionId,{source: filename + '.reverse.csv'});
+        setTimeout(() => {
+            bot.telegram.sendDocument(sessionId,{source: filename + '.reverse.csv'});
+        }, 100*counter++);
     }
 }
 
@@ -387,40 +355,25 @@ const addToMonitoringPool = (positionInstance, sessionId) => {
         b.monitoringPools[sessionId]={};
     }
     b.monitoringPools[sessionId][positionInstance.positionId] = positionInstance;
-    try {
-        db.prepare('insert into positions (session_id, position_id, position_data) values (?,?,?)')
-          .run(sessionId, positionInstance.positionId, JSON.stringify({...positionInstance, ...{ timer:0 }}));
-    }
-    catch (e) {
-        console.error(`${new Date().toISOString()}\t${sessionId}\t${positionInstance.positionId}\tError insert into db.positions: ${e.message}`);
-    }
+    addPositionToDb(sessionId, positionInstance);
 }
 const deleteFromMonitoringPool = (positionInstance, sessionId) => {
     stopTimer(positionInstance);
     delete b.monitoringPools[sessionId][positionInstance.positionId];
-    try {
-        db.prepare('delete from positions where session_id = ? and position_id = ?')
-          .run(sessionId, positionInstance.positionId);
-    } catch (e) {
-        console.error(`${new Date().toISOString()}\t${sessionId}\t${positionInstance.positionId}\tError delete from db.positions: ${e.message}`);
-    }
+    deletePositionFromDb(sessionId, positionInstance);
 }
+
 const clearMonitoringPool = (sessionId) => {
     Object.values(b.monitoringPools[sessionId]).map( (positionInstance) => {
         deleteFromMonitoringPool(positionInstance,sessionId);
     });
-    try {
-        db.prepare('delete from positions where session_id = ?')
-          .run(sessionId);
-    } catch (e) {
-        console.error(`${new Date().toISOString()}\t${sessionId}\t${positionInstance.positionId}\tError delete all from db.positions: ${e.message}`);
-    }
+    deleteAllPositionsFromDb(sessionId);
 }
 
 const restorePositions = async () => {
     console.log(`${new Date().toISOString()}\tRestoring positions...`);
-    const positions = db.prepare('select * from positions').all();
-    if(positions.length === 0) {
+    const positions = selectAllPositionsFromDb()
+    if(positions === null || positions?.length === 0) {
         return { success: true };
     }
 
@@ -455,11 +408,15 @@ const restorePositions = async () => {
 
 // Command section
 bot.start(async (ctx) => {
-    ctx.replyWithHTML(`Hi <u>${ctx.session.username}</u>!\nWelcome to <b>Spread_Arbitrage_Turtle_bot</b>!\nYour ID: ${ctx.session.id}\n${formatter.format(new Date())}`,
-      Markup.keyboard([
+    const aButtons = [
         ['Statuses', 'Logfiles'],
         ['Stop position', 'Stop all']
-      ]).resize().oneTime(false).selective(false)
+    ];
+    if(ADMIN_IDS.includes(ctx.session.id)) {
+        aButtons.push(['Restart Bot']);
+    }
+    ctx.replyWithHTML(`Hi <u>${ctx.session.username}</u>!\nWelcome to <b>Spread_Arbitrage_Turtle_bot</b>!\nYour ID: ${ctx.session.id}\n${formatter.format(new Date())}`,
+      Markup.keyboard(aButtons).resize().oneTime(false).selective(false)
     );
 });
 
@@ -591,6 +548,7 @@ bot.command('position', async (ctx) => {
         return
     }
 
+    let isPositionCreated = true;
     try {
         await b[pInstance.src1].connect(pInstance.src1Market);
         await b[pInstance.src2].connect(pInstance.src2Market);
@@ -598,11 +556,16 @@ bot.command('position', async (ctx) => {
         if(!await setArbitragePosition(pInstance, ctx.session.id)) {
             console.error(`${new Date().toISOString()}\t${ctx.session.id}\tFailed to setArbitragePosition: ${pInstance.positionId}`);
             ctx.reply(`Failed to setArbitragePosition: ${pInstance.positionId}`);
+            isPositionCreated=false;
         }
     }
     catch (e) {
         ctx.reply(`Failed to setArbitragePosition: ${pInstance.positionId}`);
         console.error(`${new Date().toISOString()}\t${ctx.session.id}\tFailed to setArbitragePosition: ${pInstance.positionId}. Error: ${e.message}`);
+        isPositionCreated=false;
+    }
+    if(isPositionCreated) {
+
     }
 });
 
@@ -619,6 +582,21 @@ const getRatio = (source, symbol) => {
 
 const stopPositionByID = (positionId, sessionId) => {
     if(positionId && b.monitoringPools[sessionId][positionId]) {
+        const positionInstance = b.monitoringPools[sessionId][positionId];
+        try {
+            console.log(`${new Date().toISOString()}\t${sessionId}\t${b[positionInstance.src1].name} ${positionInstance.src1Market} ${positionInstance.src1Symbol}. Stopping position ${positionId}`);
+            b[positionInstance.src1].unsubscribe(positionInstance.src1Symbol, positionInstance.src1Market);
+        }
+        catch (e) {
+            console.error(`${new Date().toISOString()}\t${sessionId}\t${b[positionInstance.src1].name} ${positionInstance.src1Market} ${positionInstance.src1Symbol}. Error unsubscribe from ${positionId}. Error:${e.message}`);
+        }
+        try {
+            console.log(`${new Date().toISOString()}\t${sessionId}\t${b[positionInstance.src2].name} ${positionInstance.src2Market} ${positionInstance.src2Symbol}. Stopping position ${positionId}`);
+            b[positionInstance.src2].unsubscribe(positionInstance.src2Symbol, positionInstance.src2Market);
+        }
+        catch (e) {
+            console.error(`${new Date().toISOString()}\t${sessionId}\t${b[positionInstance.src2].name} ${positionInstance.src2Market} ${positionInstance.src2Symbol}. Error unsubscribe from ${positionId}. Error:${e.message}`);
+        }
         deleteFromMonitoringPool(b.monitoringPools[sessionId][positionId], sessionId);
         bot.telegram.sendMessage(sessionId, `Position ${positionId} stopped.`);
     }
@@ -673,6 +651,10 @@ const commandStatus = async (ctx) => {
               `Duration: <b>${positionInstance.latestSuccessData.duration || '0 min'}</b> of <b>${positionInstance.targetSuccessTime/1000/60} min</b>\n\n`+
               `Position ID: ${positionInstance.positionId}`);
         }
+        console.log(`------------------------------------------------------------------------------------------------`);
+        console.log(`${new Date().toISOString()}\t${ctx.session.id}\t${positionInstance.src1} ${positionInstance.src1Market} ${positionInstance.src1Symbol}. Subscribed now: ${b[positionInstance.src1].symbols[positionInstance.src1Market][positionInstance.src1Symbol].subscribed}`);
+        console.log(`${new Date().toISOString()}\t${ctx.session.id}\t${positionInstance.src2} ${positionInstance.src2Market} ${positionInstance.src2Symbol}. Subscribed now: ${b[positionInstance.src2].symbols[positionInstance.src2Market][positionInstance.src2Symbol].subscribed}`);
+        console.log(`------------------------------------------------------------------------------------------------`);
     }
 }
 
@@ -691,6 +673,13 @@ bot.hears('Logfiles', async (ctx) => {
 
 bot.command('logfile', async (ctx) => {
     await getLogFiles(ctx.session.id);
+});
+
+bot.hears('Restart Bot', async (ctx) => {
+    if(ADMIN_IDS.includes(ctx.session.id)) {
+        ctx.reply('Bot is restarting...');
+        process.exit(0);
+    }
 });
 
 bot.on(message('text'), async (ctx) => {

@@ -8,32 +8,37 @@ const WSS_URLS = {
 class Binance extends BaseExchange {
   constructor(sessionId) {
     super(sessionId,"Binance", WSS_URLS);
+    super.setSubscribeUnsubscribeRequests(this._getSubscribeRequest(), this._getUnsubscribeRequest());
   }
 
-  _getSubscribeRequest(symbol, market) {
-    const ms = (market === 'SPOT') ? 1000 : 500;
+  _getSubscribeRequest() {
     return {
-      "method": "SUBSCRIBE",
-      "params": [`${symbol}@depth20@${ms}ms`]
+      "SPOT": {
+        "method": "SUBSCRIBE",
+        "params": ["${symbol}@depth20@1000ms"]
+      },
+      "PERP": {
+        "method": "SUBSCRIBE",
+        "params": ["${symbol}@depth20@500ms"]
+      }
     }
   }
 
-  _getUnsubscribeRequest(symbol, market)  {
-    const ms = (market === 'SPOT') ? 1000 : 500;
+  _getUnsubscribeRequest()  {
     return {
-      "method": "UNSUBSCRIBE",
-      "params": [`${symbol}@depth20@${ms}ms`]
+      "SPOT": {},
+      "PERP": {}
     }
   }
 
   async subscribe(symbol_, market) {
     const symbol = this.fixSymbol(symbol_);
-    return super.subscribe(symbol, market, this._getSubscribeRequest(symbol, market));
+    return super.subscribe(symbol, market);
   }
 
   async unsubscribe(symbol_, market) {
     const symbol = this.fixSymbol(symbol_);
-    await super.unsubscribe(symbol, market, this._getUnsubscribeRequest(symbol, market));
+    await super.unsubscribe(symbol, market);
   }
 
   onMessage(market, event) {
@@ -52,20 +57,13 @@ class Binance extends BaseExchange {
         // Skip message
         return;
       }
-      if(!this.symbols[market][_symbol]) {
+      if(!this.symbols[market][_symbol] || this.symbols[market][_symbol].subscribed === 0) {
         // First packet for this symbol
         this.symbols[market][_symbol] = {
-          subscribed: true,
-          connection: null,
-          cntMessages: 0
+          subscribed: 1,
+          cntMessages: 0,
+          lastMonitoredCntMessages: 0
         };
-        console.log(`${new Date().toISOString()}\t${this.sessionId}\t${this.name} ${market} subscribed to ${_symbol}`);
-      }
-      else if(this.symbols[market][_symbol]?.subscribed === false) {
-        // First packet for this symbol after unsubscribe
-        this.symbols[market][_symbol].subscribed = true;
-        this.symbols[market][_symbol].cntMessages = 0;
-        console.log(`${new Date().toISOString()}\t${this.sessionId}\t${this.name} ${market} subscribed to ${_symbol}`);
       }
       // Second and more packet for this symbol
       this.symbols[market][_symbol].cntMessages++;
@@ -75,20 +73,20 @@ class Binance extends BaseExchange {
         bids: {}
       }
       if(market === 'SPOT') {
-        message.data.asks.map((ask) => {
+        for(const ask of message.data.asks) {
           _snapshot.asks[ask[0]] = Number.parseFloat(ask[1])
-        });
-        message.data.bids.map((bid) => {
+        }
+        for(const bid of message.data.bids) {
           _snapshot.bids[bid[0]] = Number.parseFloat(bid[1])
-        });
+        }
       }
       else {
-        message.data.a.map((ask) => {
+        for(const ask of message.data.a) {
           _snapshot.asks[ask[0]] = Number.parseFloat(ask[1])
-        });
-        message.data.b.map((bid) => {
+        }
+        for(const bid of message.data.b) {
           _snapshot.bids[bid[0]] = Number.parseFloat(bid[1])
-        });
+        }
       }
       this.snapshots[market][_symbol] = _snapshot;
     }
