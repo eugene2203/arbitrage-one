@@ -83,6 +83,14 @@ class BaseExchange {
         reject('subscribeRequest is not defined');
         return;
       }
+      if(!symbol) {
+        reject('Symbol is not defined');
+        return;
+      }
+      if(!this.symbols[market]) {
+        reject(`${this.name} ${market} Unexpected error. No symbols structure!`);
+        return;
+      }
       // Connection validation
       if(!this.ws[market] || this.ws[market].readyState !== WebSocket.OPEN) {
         console.error(`${new Date().toISOString()}\t${this.sessionId}\t${this.name} ${market} WebSocket is not open.`);
@@ -90,7 +98,7 @@ class BaseExchange {
         return;
       }
       // Increase count of real used subscriptions if it already subscribed
-      if(this.symbols[market] && this.symbols[market][symbol] && this.symbols[market][symbol].subscribed > 0) {
+      if(this.symbols[market][symbol] && this.symbols[market][symbol].subscribed > 0) {
         this.symbols[market][symbol].subscribed++;
         console.log(`${new Date().toISOString()}\t${this.sessionId}\t${this.name} ${market} ${symbol} PLUS subscribed. Now: ${this.symbols[market][symbol].subscribed}`);
         resolve();
@@ -256,28 +264,27 @@ class BaseExchange {
   }
 
   _checkAlive = (market) => {
+    // console.warn(`_checkAlive BEGIN`, this.name, market);
     if(this.ws[market] && this.ws[market].readyState === WebSocket.OPEN) {
       this.sendPing && typeof this.sendPing === "function" && this.sendPing(market);
       for (const symbol of Object.keys(this.symbols[market])) {
-        if(this.debug) {
-          console.warn(`_checkAlive ${this.name} `+ market, symbol, this.symbols[market][symbol].cntMessages, this.symbols[market][symbol].lastMonitoredCntMessages);
-          console.warn(`ASKS ${this.name}:`, Object.entries(this.snapshots[market][symbol].asks).slice(0, 2));
-          console.warn(`BIDS ${this.name}:`, Object.entries(this.snapshots[market][symbol].bids).slice(0, 2));
-        }
+        console.warn(`_checkAlive start`, this.name, market, symbol, this.symbols[market][symbol]);
         if (this.symbols[market][symbol].subscribed > 0) {
           if(this.symbols[market][symbol].cntMessages > this.symbols[market][symbol].lastMonitoredCntMessages) {
             this.symbols[market][symbol].lastMonitoredCntMessages = this.symbols[market][symbol].cntMessages;
           }
           else {
             // we have a problem with this symbol. Maybe stuck or disconnected. Need to reconnect and resubscribe
-            if(this.keepAlive[market] === true) {
+            if(this.symbols[market][symbol].lastMonitoredCntMessages > 0 && this.keepAlive[market] === true) {
               console.log(`${new Date().toISOString()}\t${this.sessionId}\t${this.name} ${market} ${symbol} is stuck. Reconnecting and resubscribing.`);
               this.terminate(market);
             }
           }
         }
+        console.warn(`_checkAlive complete`, this.name, market, symbol, this.symbols[market][symbol]);
       }
     }
+    // console.warn(`_checkAlive END`, this.name, market);
   }
 }
 

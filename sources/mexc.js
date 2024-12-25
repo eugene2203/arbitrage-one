@@ -71,22 +71,26 @@ class Mexc extends BaseExchange {
     return symbol;
   }
 
-  subscribe(symbol_, market) {
-    const symbol = this.fixSymbol(symbol_, market);
-    return super.subscribe(symbol, market);
-  }
+  // subscribe(symbol_, market) {
+  //   const symbol = this.fixSymbol(symbol_, market);
+  //   return super.subscribe(symbol, market);
+  // }
 
-  unsubscribe(symbol_, market) {
-    const symbol = this.fixSymbol(symbol_, market);
-    super.unsubscribe(symbol, market);
-  }
+  // unsubscribe(symbol_, market) {
+    // const symbol = this.fixSymbol(symbol_, market);
+    // super.unsubscribe(symbol, market);
+  // }
 
   onMessage = (market, event) => {
     const message = JSON.parse(event.data);
     if (message.channel === `push.depth.full`) {
       // Future snapshot received
       const _symbol = message.symbol;
-      if (!this.symbols[market][_symbol] || this.symbols[market][_symbol].subscribed === 0) {
+      if(!this.symbols[market] || !this.symbols[market][_symbol]) {
+        // Skip message
+        return;
+      }
+      if (this.symbols[market] && this.symbols[market][_symbol].subscribed === 0) {
         this.symbols[market][_symbol] = {
           subscribed: 1,
           cntMessages: 0,
@@ -110,7 +114,11 @@ class Mexc extends BaseExchange {
     else if (message.c?.startsWith('spot@public.limit.depth.v3.api@') && message.s && message.d?.bids && message.d?.asks) {
       // SPOT snapshot received
       const _symbol = message.s;
-      if (!this.symbols[market][_symbol] || this.symbols[market][_symbol].subscribed === 0) {
+      if(!this.symbols[market] || !this.symbols[market][_symbol]) {
+        // Skip message
+        return;
+      }
+      if (this.symbols[market] && this.symbols[market][_symbol].subscribed === 0) {
         this.symbols[market][_symbol] = {
           subscribed: 1,
           cntMessages: 0,

@@ -66,15 +66,15 @@ class Bybit extends BaseExchange {
     return symbol;
   }
 
-  subscribe = (symbol_, market) => {
-    const symbol = this.fixSymbol(symbol_, market);
-    return super.subscribe(symbol, market);
-  }
+  // subscribe = (symbol_, market) => {
+  //   const symbol = this.fixSymbol(symbol_, market);
+  //   return super.subscribe(symbol, market);
+  // }
 
-  unsubscribe = (symbol_, market) => {
-    const symbol = this.fixSymbol(symbol_, market);
-    super.unsubscribe(symbol, market);
-  }
+  // unsubscribe = (symbol_, market) => {
+  //   const symbol = this.fixSymbol(symbol_, market);
+  //   super.unsubscribe(symbol, market);
+  // }
 
   onMessage(market, event) {
     const message = JSON.parse(event.data);
@@ -83,7 +83,7 @@ class Bybit extends BaseExchange {
       switch (message.type) {
         case "snapshot":
           // SNAPSHOT order book
-          if(!this.symbols[market][_symbol] || this.symbols[market][_symbol]?.subscribed === 0) {
+          if(this.symbols[market][_symbol] && this.symbols[market][_symbol]?.subscribed === 0) {
             this.symbols[market][_symbol] = {
               subscribed: 1,
               cntMessages: 0,
@@ -111,7 +111,7 @@ class Bybit extends BaseExchange {
               // We lose packet(s)! Need to reconnect and resubscribe
               console.error(`${new Date().toISOString()}\t${this.sessionId}\tBybit ${market} ${_symbol} lost packets. Need to resubscribe. LastUpdateId: ${this.symbols[market][_symbol].lastUpdateId} CurrentUpdateId: ${message.data.u}`);
               this.unsubscribe(_symbol, market);
-              this.subscribe(_symbol, market);
+              this.subscribe(_symbol, market).then();
               return;
             }
             this.symbols[market][_symbol].cntMessages++;

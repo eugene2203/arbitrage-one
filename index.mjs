@@ -193,11 +193,18 @@ const stopTimer = (positionInstance) => {
 const setArbitragePosition = async (positionInstance, sessionId=0) => {
     try {
         await b[positionInstance.src1].subscribe(positionInstance.src1Symbol, positionInstance.src1Market);
+    }
+    catch (e) {
+        console.error(`${new Date().toISOString()}\t${sessionId}\tError subscribing to ${positionInstance.positionId} ${positionInstance.src1} ${positionInstance.src1Market} ${positionInstance.src1Symbol}. Error:${e.message}`,e);
+        return false;
+    }
+
+    try {
         await b[positionInstance.src2].subscribe(positionInstance.src2Symbol, positionInstance.src2Market);
     }
     catch (e) {
-        // clearAllPositionData(positionInstance.positionId, sessionId);
-        console.error(`${new Date().toISOString()}\t${sessionId}\tError subscribing to ${positionInstance.positionId}. Error:${e.message}`,e);
+        await b[positionInstance.src1].unsubscribe(positionInstance.src1Symbol, positionInstance.src1Market);
+        console.error(`${new Date().toISOString()}\t${sessionId}\tError subscribing to ${positionInstance.positionId} ${positionInstance.src2} ${positionInstance.src2Market} ${positionInstance.src2Symbol}. Error:${e.message}`,e);
         return false;
     }
 
@@ -533,16 +540,49 @@ bot.command('position', async (ctx) => {
     setTargetSuccessTime(duration, pInstance); // duration in minutes
     setPositionVolume(volume, pInstance); // duration in minutes
 
+    try {
+        await b[pInstance.src1].connect(pInstance.src1Market);
+    }
+    catch (e) {
+        console.error(`${new Date().toISOString()}\t${ctx.session.id}\t${b[pInstance.src1].name} ${pInstance.src1Market} Failed to connect. Error: ${e.message}`);
+        ctx.reply(`Failed to setArbitragePosition: ${pInstance.positionDirection} ${pInstance.src1} ${pInstance.src1Market} ${pInstance.src1Symbol} vs ${pInstance.src2} ${pInstance.src2Market} ${pInstance.src2Symbol}`);
+        return;
+    }
+    try {
+        await b[pInstance.src2].connect(pInstance.src2Market);
+    }
+    catch (e) {
+        console.error(`${new Date().toISOString()}\t${ctx.session.id}\t${b[pInstance.src2].name} ${pInstance.src2Market} Failed to connect. Error: ${e.message}`);
+        ctx.reply(`Failed to setArbitragePosition: ${pInstance.positionDirection} ${pInstance.src1} ${pInstance.src1Market} ${pInstance.src1Symbol} vs ${pInstance.src2} ${pInstance.src2Market} ${pInstance.src2Symbol}`);
+        return;
+    }
 
+
+    let isFixedSymbols = false;
     try {
         pInstance.src1Symbol = b[pInstance.src1].fixSymbol(pInstance.src1Symbol, pInstance.src1Market);
         pInstance.src2Symbol = b[pInstance.src2].fixSymbol(pInstance.src2Symbol, pInstance.src2Market);
+        isFixedSymbols = true;
     }
     catch (e) {
-        console.error(`${new Date().toISOString()}\t${ctx.session.id}\tFailed to fixSymbol: ${pInstance.positionId}. Error: ${e.message}`);
+        console.error(`${new Date().toISOString()}\t${ctx.session.id}\tFailed to fixSymbol. Error: ${e.message}`);
     }
 
-    pInstance.positionId = `${pInstance.src1}_${pInstance.src1Market}_${pInstance.src1AskBid}_${pInstance.src1Symbol}-${pInstance.src2}_${pInstance.src2Market}_${pInstance.src2AskBid}_${pInstance.src2Symbol}`;
+    if(!pInstance.src1Symbol) {
+        console.error(`${new Date().toISOString()}\t${ctx.session.id}\tFailed to fixSymbol: ${pInstance.src1Market} ${pInstance.src1Symbol}.`);
+        isFixedSymbols = false;
+    }
+    if(!pInstance.src2Symbol) {
+        console.error(`${new Date().toISOString()}\t${ctx.session.id}\tFailed to fixSymbol: ${pInstance.src2Market} ${pInstance.src2Symbol}.`);
+        isFixedSymbols = false;
+    }
+
+    if(!isFixedSymbols) {
+        ctx.reply(`Failed to setArbitragePosition: ${pInstance.positionDirection} ${pInstance.src1} ${pInstance.src1Market} ${pInstance.src1Symbol} vs ${pInstance.src2} ${pInstance.src2Market} ${pInstance.src2Symbol}`);
+        return;
+    }
+
+    pInstance.positionId = `${pInstance.src1}_${pInstance.src1Market}_${pInstance.src1AskBid}_${pInstance.src1Symbol.replaceAll('/','!')}-${pInstance.src2}_${pInstance.src2Market}_${pInstance.src2AskBid}_${pInstance.src2Symbol.replaceAll('/','!')}`;
     if(b.monitoringPools[ctx.session.id][pInstance.positionId]) {
         ctx.reply(`Position ${pInstance.positionId} already exists.`);
         return
@@ -550,12 +590,9 @@ bot.command('position', async (ctx) => {
 
     let isPositionCreated = true;
     try {
-        await b[pInstance.src1].connect(pInstance.src1Market);
-        await b[pInstance.src2].connect(pInstance.src2Market);
-
         if(!await setArbitragePosition(pInstance, ctx.session.id)) {
             console.error(`${new Date().toISOString()}\t${ctx.session.id}\tFailed to setArbitragePosition: ${pInstance.positionId}`);
-            ctx.reply(`Failed to setArbitragePosition: ${pInstance.positionId}`);
+            ctx.reply(`Failed to setArbitragePosition: ${pInstance.positionDirection} ${pInstance.src1} ${pInstance.src1Market} ${pInstance.src1Symbol} vs ${pInstance.src2} ${pInstance.src2Market} ${pInstance.src2Symbol}`);
             isPositionCreated=false;
         }
     }
@@ -606,12 +643,19 @@ const stopPositionByID = (positionId, sessionId) => {
 }
 
 const commandStopPosition = async (ctx) => {
-    const buttons = Object.values(b.monitoringPools[ctx.session.id]).map((position) => [
-        {
-            text: `${position.positionDirection}: ${position.src1} ${position.src1Symbol} vs ${position.src2} ${position.src2Market} ${position.src2Symbol}`,
-            callback_data: `${position.positionId}:${ctx.session.id}`
-        },
-    ]);
+    const buttons = [];
+    for( const positionInstance of Object.values(b.monitoringPools[ctx.session.id])) {
+        let src2Symbol = positionInstance.src2Symbol;
+        if(positionInstance.src2 === 'HL' && positionInstance.src2Market === 'SPOT') {
+            src2Symbol = b[positionInstance.src2].getCoinFromSpotname(positionInstance.src2Symbol);
+        }
+        buttons.push([
+            {
+                text: `${positionInstance.positionDirection}: ${positionInstance.src1} ${positionInstance.src1Symbol} vs ${positionInstance.src2} ${positionInstance.src2Market} ${src2Symbol}`,
+                callback_data: `${positionInstance.positionId}:${ctx.session.id}`
+            },
+        ]);
+    }
     ctx.reply('Select the position to be stopped:', { reply_markup: { inline_keyboard: buttons } });
 }
 
@@ -630,12 +674,17 @@ const commandStatus = async (ctx) => {
         return;
     }
     for(const positionInstance of Object.values(b.monitoringPools[ctx.session.id])) {
+        console.warn(`commandStatus: ${b[positionInstance.src1].name} ${positionInstance.src1Market} ${positionInstance.src1Symbol}`, b[positionInstance.src1].symbols[positionInstance.src1Market][positionInstance.src1Symbol]);
         const data =  calculateArbitrage(positionInstance);
         let str = '';
+        let src2Symbol = positionInstance.src2Symbol;
         if(data) {
+            if(positionInstance.src2 === 'HL' && positionInstance.src2Market === 'SPOT') {
+                src2Symbol = b[positionInstance.src2].getCoinFromSpotname(positionInstance.src2Symbol);
+            }
             str =
               `<b>${positionInstance.src1} <u>${positionInstance.src1Market}</u></b> <b>${positionInstance.src1Symbol} <u>${positionInstance.src1AskBid}</u></b>\n`+
-              `<b>${positionInstance.src2} <u>${positionInstance.src2Market}</u></b> <b>${positionInstance.src2Symbol} <u>${positionInstance.src2AskBid}</u></b>.\n` +
+              `<b>${positionInstance.src2} <u>${positionInstance.src2Market}</u></b> <b>${src2Symbol} <u>${positionInstance.src2AskBid}</u></b>.\n` +
               `<b>Spread: ${data.delta}</b>% / Target: <b>${positionInstance.MONITORING_DELTA}</b>%\n`
             // console.warn(positionInstance.src1, positionInstance.positionDirection);
             if(positionInstance.src1 === 'HL' && positionInstance.src1Market === 'PERP' && positionInstance.positionDirection === 'CLOSE') {
@@ -653,7 +702,7 @@ const commandStatus = async (ctx) => {
         }
         console.log(`------------------------------------------------------------------------------------------------`);
         console.log(`${new Date().toISOString()}\t${ctx.session.id}\t${positionInstance.src1} ${positionInstance.src1Market} ${positionInstance.src1Symbol}. Subscribed now: ${b[positionInstance.src1].symbols[positionInstance.src1Market][positionInstance.src1Symbol].subscribed}`);
-        console.log(`${new Date().toISOString()}\t${ctx.session.id}\t${positionInstance.src2} ${positionInstance.src2Market} ${positionInstance.src2Symbol}. Subscribed now: ${b[positionInstance.src2].symbols[positionInstance.src2Market][positionInstance.src2Symbol].subscribed}`);
+        console.log(`${new Date().toISOString()}\t${ctx.session.id}\t${positionInstance.src2} ${positionInstance.src2Market} ${src2Symbol}. Subscribed now: ${b[positionInstance.src2].symbols[positionInstance.src2Market][positionInstance.src2Symbol].subscribed}`);
         console.log(`------------------------------------------------------------------------------------------------`);
     }
 }

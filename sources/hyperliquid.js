@@ -1,7 +1,7 @@
 import BaseExchange from "./base.js";
 
 const WSS_URLS = {
-  'SPOT': '',
+  'SPOT': 'wss://api.hyperliquid.xyz/ws',
   'PERP': 'wss://api.hyperliquid.xyz/ws'
 };
 
@@ -13,6 +13,8 @@ class Hyperliquid  extends BaseExchange {
   constructor(sessionId) {
     super(sessionId,"Hyperliquid", WSS_URLS);
     super.setSubscribeUnsubscribeRequests(this._getSubscribeRequest(), this._getUnsubscribeRequest());
+    this.mapCoinToSpotname = {};
+    this.mapSpotnameToCoin = {};
   }
 
   _getSubscribeRequest() {
@@ -51,6 +53,14 @@ class Hyperliquid  extends BaseExchange {
         }
       }
     }
+  }
+
+  getSpotnameFromCoin = (coin) => {
+    return this.mapCoinToSpotname[coin];
+  }
+
+  getCoinFromSpotname = (spotname) => {
+    return this.mapSpotnameToCoin[spotname];
   }
 
   getFundingRatesAfter0Level = async (coin, market='PERP') => {
@@ -96,6 +106,35 @@ class Hyperliquid  extends BaseExchange {
     }
   }
 
+  _createSpotMetaInfo = async () => {
+    try {
+      const response = await fetch(REST_INFO_HYPERLIQUID_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          "type": "spotMeta"
+        })
+      });
+      const data = await response.json();
+      if(data.universe && Array.isArray(data.universe) && data.tokens && Array.isArray(data.tokens)) {
+        for(const coinInfo of data.tokens) {
+          const coin = coinInfo.name;
+          const index = coinInfo.index;
+          const universeInfo = data.universe.find((item) => item.tokens[0] === index);
+          if(universeInfo) {
+            this.mapCoinToSpotname[coin] = universeInfo.name;
+            this.mapSpotnameToCoin[universeInfo.name] = coin;
+          }
+        }
+      }
+    }
+    catch (e) {
+      console.error(`${new Date().toISOString()}\t${this.sessionId}\tHyperliquid getSpotMetaInfo error:`, e.message);
+    }
+  }
+
   setKeepAlive(value, market='PERP') {
     this.keepAlive[market] = value;
   }
@@ -105,33 +144,43 @@ class Hyperliquid  extends BaseExchange {
   }
 
   fixSymbol = (symbol_, market) => {
-    return symbol_;
+    console.warn('Hyperliquid fixSymbol', symbol_, market);
+    let resSymbol = symbol_;
+    if(market === 'SPOT') {
+      if(symbol_.toUpperCase() === 'PURR') {
+        resSymbol = "PURR/USDC";
+      }
+      else if (!symbol_.startsWith('@')) {
+        resSymbol = this.mapCoinToSpotname[symbol_];
+      }
+    }
+    console.warn('Hyperliquid fixSymbol RESULT:', resSymbol, market);
+    return resSymbol;
   }
 
-  subscribe(coin, market='PERP') {
-    if(market === 'SPOT') {
-      throw new Error(`Can't subscribe to Hyperliquid ${market} ${coin}. SPOT market is not supported.`);
-    }
-    const symbol = this.fixSymbol(coin, market);
+  subscribe(symbol, market) {
+    console.warn('Hyperliquid subscribe', symbol, market);
     return super.subscribe(symbol, market);
   }
 
-  unsubscribe(coin, market='PERP') {
-    const symbol = this.fixSymbol(coin, market);
+  unsubscribe(symbol, market) {
+    console.warn('Hyperliquid unsubscribe', symbol, market);
     super.unsubscribe(symbol, market);
   }
 
   onMessage = (market, event) => {
     const message = JSON.parse(event.data);
-    if (message?.channel === `l2Book`) {
+    if(message?.channel === "subscriptionResponse" && message?.data?.method === "subscribe" && message?.data?.subscription?.type === "l2Book") {
+      const _symbol = message.data.subscription.coin;
+      if(this.symbols[market] && this.symbols[market][_symbol]?.subscribed === 0) {
+        console.log(`${new Date().toISOString()}\t${this.sessionId}\tHyperliquid ${market} subscription to ${_symbol} confirmed.`);
+        this.symbols[market][_symbol].subscribed=1;
+      }
+    }
+    else if (message?.channel === `l2Book`) {
       let _symbol = message.data.coin;
-      // Update order book
-      if(!this.symbols[market][_symbol] || this.symbols[market][_symbol].subscribed === 0) {
-        this.symbols[market][_symbol] = {
-          subscribed: 1,
-          cntMessages: 0,
-          lastMonitoredCntMessages: 0
-        };
+      if(!this.symbols[market][_symbol] || this.symbols[market][_symbol]?.subscribed === 0) {
+        return;
       }
       this.symbols[market][_symbol].cntMessages++;
       const _snapshot = {
@@ -161,6 +210,16 @@ class Hyperliquid  extends BaseExchange {
         console.error(`${new Date().toISOString()}\t${this.sessionId}\tHyperliquid ${market} subscription error:`, e, message.data);
       }
     }
+  }
+
+  async connect(market) {
+    // console.warn('Hyperliquid connect', market, Object.keys(this.mapCoinToSpotname));
+    if(market === 'SPOT' && Object.keys(this.mapCoinToSpotname).length === 0) {
+      await this._createSpotMetaInfo();
+      // console.warn('Hyperliquid connect SPOT _createSpotMetaInfo completed');
+      // console.log(this.mapCoinToSpotname);
+    }
+    return super.connect(market);
   }
 }
 

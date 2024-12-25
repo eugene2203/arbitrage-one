@@ -31,15 +31,15 @@ class Binance extends BaseExchange {
     }
   }
 
-  async subscribe(symbol_, market) {
-    const symbol = this.fixSymbol(symbol_);
-    return super.subscribe(symbol, market);
-  }
+  // async subscribe(symbol_, market) {
+    // const symbol = this.fixSymbol(symbol_);
+    // return super.subscribe(symbol, market);
+  // }
 
-  async unsubscribe(symbol_, market) {
-    const symbol = this.fixSymbol(symbol_);
-    await super.unsubscribe(symbol, market);
-  }
+  // async unsubscribe(symbol_, market) {
+  //   const symbol = this.fixSymbol(symbol_);
+  //   await super.unsubscribe(symbol, market);
+  // }
 
   onMessage(market, event) {
     const message = JSON.parse(event.data);
@@ -57,7 +57,10 @@ class Binance extends BaseExchange {
         // Skip message
         return;
       }
-      if(!this.symbols[market][_symbol] || this.symbols[market][_symbol].subscribed === 0) {
+      if(!this.symbols[market][_symbol]) {
+        return;
+      }
+      if(this.symbols[market][_symbol].subscribed === 0) {
         // First packet for this symbol
         this.symbols[market][_symbol] = {
           subscribed: 1,
