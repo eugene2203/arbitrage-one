@@ -3,10 +3,10 @@ import Database from 'better-sqlite3';
 
 const db = new Database(DB_PATH);
 
-export function addPositionToDb(sessionId, positionInstance) {
+export function addPositionToDb(sessionId, username, positionInstance) {
   try {
-    db.prepare('insert into positions (session_id, position_id, position_data) values (?,?,?)')
-      .run(sessionId, positionInstance.positionId, JSON.stringify({...positionInstance, ...{ timer:0 }}));
+    db.prepare("insert into positions (session_id, position_id, username, position_data, opened_at) values (?,?,?,?,STRFTIME('%Y-%m-%dT%H:%M:%f', 'now'))")
+      .run(sessionId, positionInstance.positionId, username, JSON.stringify({...positionInstance, ...{ timer:0 }}));
   }
   catch (e) {
     console.error(`${new Date().toISOString()}\t${sessionId}\t${positionInstance.positionId}\tError insert into db.positions: ${e.message}`);
@@ -15,6 +15,11 @@ export function addPositionToDb(sessionId, positionInstance) {
 
 export function deletePositionFromDb(sessionId, positionInstance) {
   try {
+    db.prepare('insert into positions_archive (session_id, position_id, username, position_data, opened_at, closed_at) ' +
+      'select session_id, position_id, username, position_data, opened_at, STRFTIME(\'%Y-%m-%dT%H:%M:%S\', \'now\') AS closed_at from positions ' +
+      'where session_id = ? and position_id = ?')
+      .run(sessionId, positionInstance.positionId);
+
     db.prepare('delete from positions where session_id = ? and position_id = ?')
       .run(sessionId, positionInstance.positionId);
   } catch (e) {
@@ -24,6 +29,11 @@ export function deletePositionFromDb(sessionId, positionInstance) {
 
 export function deleteAllPositionsFromDb(sessionId) {
   try {
+    db.prepare('insert into positions_archive (session_id, position_id, username, position_data, opened_at, closed_at) ' +
+      'select session_id, position_id, username, position_data, opened_at, STRFTIME(\'%Y-%m-%dT%H:%M:%S\', \'now\') AS closed_at from positions ' +
+      'where session_id = ?')
+      .run(sessionId);
+
     db.prepare('delete from positions where session_id = ?')
       .run(sessionId);
   } catch (e) {

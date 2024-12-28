@@ -206,7 +206,7 @@ class BaseExchange {
           ws.onclose = async () => {
             this.aliveTimer[market] && clearInterval(this.aliveTimer[market]);
             if(this.keepAlive[market]) {
-              console.warn(`${new Date().toISOString()}\t${this.sessionId}\tReconnecting to ${this.name} ${market} WebSocket`);
+              //console.warn(`${new Date().toISOString()}\t${this.sessionId}\tReconnecting to ${this.name} ${market} WebSocket`);
               try {
                 await this.connect(market);
               }
@@ -238,7 +238,7 @@ class BaseExchange {
           reject(error);
         }
         ws.onclose = (closeEvent) => {
-          console.warn(`${new Date().toISOString()}\t${this.sessionId}\t${this.name} ${market} WebSocket top level closed:`, closeEvent);
+          //console.warn(`${new Date().toISOString()}\t${this.sessionId}\t${this.name} ${market} WebSocket top level closed:`, closeEvent);
           this.aliveTimer[market] && clearInterval(this.aliveTimer[market]);
           reject(closeEvent);
         }
@@ -268,7 +268,7 @@ class BaseExchange {
     if(this.ws[market] && this.ws[market].readyState === WebSocket.OPEN) {
       this.sendPing && typeof this.sendPing === "function" && this.sendPing(market);
       for (const symbol of Object.keys(this.symbols[market])) {
-        console.warn(`_checkAlive start`, this.name, market, symbol, this.symbols[market][symbol]);
+        // console.warn(`_checkAlive start`, this.name, market, symbol, this.symbols[market][symbol]);
         if (this.symbols[market][symbol].subscribed > 0) {
           if(this.symbols[market][symbol].cntMessages > this.symbols[market][symbol].lastMonitoredCntMessages) {
             this.symbols[market][symbol].lastMonitoredCntMessages = this.symbols[market][symbol].cntMessages;
@@ -281,7 +281,7 @@ class BaseExchange {
             }
           }
         }
-        console.warn(`_checkAlive complete`, this.name, market, symbol, this.symbols[market][symbol]);
+        // console.warn(`_checkAlive complete`, this.name, market, symbol, this.symbols[market][symbol]);
       }
     }
     // console.warn(`_checkAlive END`, this.name, market);

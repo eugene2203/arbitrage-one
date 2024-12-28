@@ -5,7 +5,12 @@ import fs from 'node:fs';
 import { spawn } from 'node:child_process';
 
 import { dataSources, TELEGRAM_BOT_TOKEN, ADMIN_IDS } from './utils/config.js';
-import { addPositionToDb, deletePositionFromDb, deleteAllPositionsFromDb, selectAllPositionsFromDb } from './utils/db.js';
+import {
+    addPositionToDb,
+    deletePositionFromDb,
+    deleteAllPositionsFromDb,
+    selectAllPositionsFromDb
+} from './utils/db.js';
 import { formatter } from './utils/utils.js';
 
 const dataSourceKeys = Object.keys(dataSources);
@@ -187,7 +192,7 @@ function calculateArbitrage(positionInstance) {
 
 /* Bot services */
 const stopTimer = (positionInstance) => {
-    positionInstance?.timer && clearInterval(positionInstance.timer) && (positionInstance.timer = 0);
+    positionInstance?.timer && clearInterval(positionInstance.timer);
 }
 
 const setArbitragePosition = async (positionInstance, sessionId=0) => {
@@ -229,8 +234,6 @@ const setArbitragePosition = async (positionInstance, sessionId=0) => {
     positionInstance.timer = setInterval(async () => {
         await monitorAction(positionInstance, sessionId);
     }, positionInstance.MONITORING_INTERVAL);
-    addToMonitoringPool(positionInstance,sessionId);
-    await logToCSV(sessionId, positionInstance, {}, true);
     return true;
 }
 
@@ -319,13 +322,13 @@ const getLogFiles = async (sessionId) => {
 
         try {
             // Check if reverse file exists and delete it
-            await fsPromises.unlink(filename + '.reverse.csv');
+            await fsPromises.unlink(filename.replaceAll('arbitrage_','') + '.log.csv');
         }
         catch (e) {}
         // Here we have no .reverse.csv file
         try {
             // Run tac command for copy file. It should reverse the file .copy.csv and write to .reverse.csv
-            await runTac(filename + '.copy.csv', filename + '.reverse.csv');
+            await runTac(filename + '.copy.csv', filename.replaceAll('arbitrage_','') + '.log.csv');
             await fsPromises.unlink(filename + '.copy.csv');
         }
         catch (e) {
@@ -333,8 +336,12 @@ const getLogFiles = async (sessionId) => {
             bot.telegram.sendMessage(sessionId,`Can't provide log file for ${positionId}: ${e.message || e}`, {parse_mode: 'HTML'});
             continue;
         }
-        setTimeout(() => {
-            bot.telegram.sendDocument(sessionId,{source: filename + '.reverse.csv'});
+        setTimeout(async () => {
+            console.log(`${new Date().toISOString()}\t${sessionId}\tSend log file ${filename}.reverse.csv`);
+            bot.telegram.sendDocument(sessionId, {
+                  source: filename.replaceAll('arbitrage_','') + '.log.csv'
+              }
+            );
         }, 100*counter++);
     }
 }
@@ -362,19 +369,16 @@ const addToMonitoringPool = (positionInstance, sessionId) => {
         b.monitoringPools[sessionId]={};
     }
     b.monitoringPools[sessionId][positionInstance.positionId] = positionInstance;
-    addPositionToDb(sessionId, positionInstance);
 }
 const deleteFromMonitoringPool = (positionInstance, sessionId) => {
     stopTimer(positionInstance);
     delete b.monitoringPools[sessionId][positionInstance.positionId];
-    deletePositionFromDb(sessionId, positionInstance);
 }
 
 const clearMonitoringPool = (sessionId) => {
-    Object.values(b.monitoringPools[sessionId]).map( (positionInstance) => {
+    for(const positionInstance of Object.values(b.monitoringPools[sessionId])) {
         deleteFromMonitoringPool(positionInstance,sessionId);
-    });
-    deleteAllPositionsFromDb(sessionId);
+    }
 }
 
 const restorePositions = async () => {
@@ -383,10 +387,22 @@ const restorePositions = async () => {
     if(positions === null || positions?.length === 0) {
         return { success: true };
     }
+    const processedUsers = [];
 
     for(const row of positions) {
         const positionInstance = JSON.parse(row.position_data);
         const sessionId = row.session_id;
+
+        if(!processedUsers.includes(sessionId)) {
+            processedUsers.push(sessionId);
+            let usernameBlock = '';
+            if(row.username) {
+                usernameBlock = `Hi, <b>${row.username}</b>\n`;
+            }
+            bot.telegram.sendMessage(sessionId, `${usernameBlock}We regret that the bot has to be restarted for technical reasons. <u>All your positions will be restored</u>.`,
+              {parse_mode: 'HTML'}
+            );
+        }
         let isRestored = true;
         for(let index= 1; index <= 2; index++) {
             if (!b[positionInstance[`src${index}`]] || !(typeof b[positionInstance[`src${index}`]].connect === "function")) {
@@ -402,7 +418,9 @@ const restorePositions = async () => {
             }
         }
         if(isRestored) {
-           if (await setArbitragePosition(positionInstance, sessionId)) {
+            if (await setArbitragePosition(positionInstance, sessionId)) {
+                addToMonitoringPool(positionInstance,sessionId);
+                await logToCSV(sessionId, positionInstance, {}, true);
                 console.log(`${new Date().toISOString()}\t${sessionId}\tPosition ${positionInstance.positionId} restored.`);
             }
         }
@@ -449,6 +467,10 @@ bot.command('help', (ctx) => {
 
 bot.hears('Stop all', (ctx) => {
     clearMonitoringPool(ctx.session.id);
+    deleteAllPositionsFromDb(ctx.session.id);
+    console.log(`${new Date().toISOString()}\t${ctx.session.id}\tAll positions are closed.`);
+    ctx.reply('All positions are closed.');
+
 });
 
 bot.command('disconnect', async (ctx) => {
@@ -588,21 +610,20 @@ bot.command('position', async (ctx) => {
         return
     }
 
-    let isPositionCreated = true;
     try {
-        if(!await setArbitragePosition(pInstance, ctx.session.id)) {
+        if(await setArbitragePosition(pInstance, ctx.session.id)) {
+            addToMonitoringPool(pInstance,ctx.session.id);
+            addPositionToDb(ctx.session.id, ctx.session.username, pInstance);
+            await logToCSV(ctx.session.id, pInstance, {}, true);
+        }
+        else {
             console.error(`${new Date().toISOString()}\t${ctx.session.id}\tFailed to setArbitragePosition: ${pInstance.positionId}`);
             ctx.reply(`Failed to setArbitragePosition: ${pInstance.positionDirection} ${pInstance.src1} ${pInstance.src1Market} ${pInstance.src1Symbol} vs ${pInstance.src2} ${pInstance.src2Market} ${pInstance.src2Symbol}`);
-            isPositionCreated=false;
         }
     }
     catch (e) {
         ctx.reply(`Failed to setArbitragePosition: ${pInstance.positionId}`);
         console.error(`${new Date().toISOString()}\t${ctx.session.id}\tFailed to setArbitragePosition: ${pInstance.positionId}. Error: ${e.message}`);
-        isPositionCreated=false;
-    }
-    if(isPositionCreated) {
-
     }
 });
 
@@ -635,6 +656,7 @@ const stopPositionByID = (positionId, sessionId) => {
             console.error(`${new Date().toISOString()}\t${sessionId}\t${b[positionInstance.src2].name} ${positionInstance.src2Market} ${positionInstance.src2Symbol}. Error unsubscribe from ${positionId}. Error:${e.message}`);
         }
         deleteFromMonitoringPool(b.monitoringPools[sessionId][positionId], sessionId);
+        deletePositionFromDb(sessionId, positionInstance);
         bot.telegram.sendMessage(sessionId, `Position ${positionId} stopped.`);
     }
     else {
@@ -674,7 +696,7 @@ const commandStatus = async (ctx) => {
         return;
     }
     for(const positionInstance of Object.values(b.monitoringPools[ctx.session.id])) {
-        console.warn(`commandStatus: ${b[positionInstance.src1].name} ${positionInstance.src1Market} ${positionInstance.src1Symbol}`, b[positionInstance.src1].symbols[positionInstance.src1Market][positionInstance.src1Symbol]);
+        //console.warn(`commandStatus: ${b[positionInstance.src1].name} ${positionInstance.src1Market} ${positionInstance.src1Symbol}`, b[positionInstance.src1].symbols[positionInstance.src1Market][positionInstance.src1Symbol]);
         const data =  calculateArbitrage(positionInstance);
         let str = '';
         let src2Symbol = positionInstance.src2Symbol;
@@ -727,6 +749,7 @@ bot.command('logfile', async (ctx) => {
 bot.hears('Restart Bot', async (ctx) => {
     if(ADMIN_IDS.includes(ctx.session.id)) {
         ctx.reply('Bot is restarting...');
+        console.log(`${new Date().toISOString()}\t${ctx.session.id}\t${ctx.session.username}\tBot is restarting...`);
         process.exit(0);
     }
 });

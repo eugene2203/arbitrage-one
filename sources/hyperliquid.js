@@ -144,7 +144,7 @@ class Hyperliquid  extends BaseExchange {
   }
 
   fixSymbol = (symbol_, market) => {
-    console.warn('Hyperliquid fixSymbol', symbol_, market);
+    // console.warn('Hyperliquid fixSymbol', symbol_, market);
     let resSymbol = symbol_;
     if(market === 'SPOT') {
       if(symbol_.toUpperCase() === 'PURR') {
@@ -154,19 +154,19 @@ class Hyperliquid  extends BaseExchange {
         resSymbol = this.mapCoinToSpotname[symbol_];
       }
     }
-    console.warn('Hyperliquid fixSymbol RESULT:', resSymbol, market);
+    // console.warn('Hyperliquid fixSymbol RESULT:', resSymbol, market);
     return resSymbol;
   }
 
-  subscribe(symbol, market) {
-    console.warn('Hyperliquid subscribe', symbol, market);
-    return super.subscribe(symbol, market);
-  }
+  // subscribe(symbol, market) {
+    // console.warn('Hyperliquid subscribe', symbol, market);
+    // return super.subscribe(symbol, market);
+  // }
 
-  unsubscribe(symbol, market) {
-    console.warn('Hyperliquid unsubscribe', symbol, market);
-    super.unsubscribe(symbol, market);
-  }
+  // unsubscribe(symbol, market) {
+    // console.warn('Hyperliquid unsubscribe', symbol, market);
+    // super.unsubscribe(symbol, market);
+  // }
 
   onMessage = (market, event) => {
     const message = JSON.parse(event.data);
