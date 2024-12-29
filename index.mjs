@@ -200,8 +200,8 @@ const setArbitragePosition = async (positionInstance, sessionId=0) => {
         await b[positionInstance.src1].subscribe(positionInstance.src1Symbol, positionInstance.src1Market);
     }
     catch (e) {
-        console.error(`${new Date().toISOString()}\t${sessionId}\tError subscribing to ${positionInstance.positionId} ${positionInstance.src1} ${positionInstance.src1Market} ${positionInstance.src1Symbol}. Error:${e.message}`,e);
-        return false;
+        console.error(`${new Date().toISOString()}\t${sessionId}\tError subscribing to ${positionInstance.positionId}. Error:${e}`);
+        throw new Error(e);
     }
 
     try {
@@ -209,8 +209,8 @@ const setArbitragePosition = async (positionInstance, sessionId=0) => {
     }
     catch (e) {
         await b[positionInstance.src1].unsubscribe(positionInstance.src1Symbol, positionInstance.src1Market);
-        console.error(`${new Date().toISOString()}\t${sessionId}\tError subscribing to ${positionInstance.positionId} ${positionInstance.src2} ${positionInstance.src2Market} ${positionInstance.src2Symbol}. Error:${e.message}`,e);
-        return false;
+        console.error(`${new Date().toISOString()}\t${sessionId}\tError subscribing to ${positionInstance.positionId}. Error:${e}`);
+        throw new Error(e);
     }
 
     try {
@@ -418,11 +418,22 @@ const restorePositions = async () => {
             }
         }
         if(isRestored) {
-            if (await setArbitragePosition(positionInstance, sessionId)) {
+            try {
+                await setArbitragePosition(positionInstance, sessionId);
                 addToMonitoringPool(positionInstance,sessionId);
-                await logToCSV(sessionId, positionInstance, {}, true);
-                console.log(`${new Date().toISOString()}\t${sessionId}\tPosition ${positionInstance.positionId} restored.`);
             }
+            catch (e) {
+                console.error(`${new Date().toISOString()}\t${sessionId}\tFailed to restore position ${positionInstance.positionId}. Error: ${e.message}`);
+                continue;
+            }
+
+            try {
+                await logToCSV(sessionId, positionInstance, {}, true);
+            }
+            catch (e) {
+                console.error(`${new Date().toISOString()}\t${sessionId}\tRestoring. Failed to save log CSV ${positionInstance.positionId}. Error: ${e.message}`);
+            }
+            console.log(`${new Date().toISOString()}\t${sessionId}\tPosition ${positionInstance.positionId} restored.`);
         }
         else {
             console.error(`${new Date().toISOString()}\t${sessionId}\tFailed to restore position ${positionInstance.positionId}`);
@@ -500,7 +511,7 @@ bot.command('position', async (ctx) => {
         askBid2 = 'BID';
     }
 
-    if (dataSourceKeys.includes(src1.toUpperCase()) === false || dataSourceKeys.includes(src2.toUpperCase()) === false) {
+    if (!dataSourceKeys.includes(src1.toUpperCase()) || !dataSourceKeys.includes(src2.toUpperCase())) {
         ctx.reply('Sorry, I did not understand Source1 or Source2. Please use one of '+Object.keys(dataSources).join(', '));
         return;
     }
@@ -567,7 +578,7 @@ bot.command('position', async (ctx) => {
     }
     catch (e) {
         console.error(`${new Date().toISOString()}\t${ctx.session.id}\t${b[pInstance.src1].name} ${pInstance.src1Market} Failed to connect. Error: ${e.message}`);
-        ctx.reply(`Failed to setArbitragePosition: ${pInstance.positionDirection} ${pInstance.src1} ${pInstance.src1Market} ${pInstance.src1Symbol} vs ${pInstance.src2} ${pInstance.src2Market} ${pInstance.src2Symbol}`);
+        ctx.reply(`Can't connect to ${pInstance.src1}.\nFailed to setArbitragePosition: ${pInstance.positionDirection} ${pInstance.src1} ${pInstance.src1Market} ${pInstance.src1Symbol} vs ${pInstance.src2} ${pInstance.src2Market} ${pInstance.src2Symbol}`);
         return;
     }
     try {
@@ -575,32 +586,26 @@ bot.command('position', async (ctx) => {
     }
     catch (e) {
         console.error(`${new Date().toISOString()}\t${ctx.session.id}\t${b[pInstance.src2].name} ${pInstance.src2Market} Failed to connect. Error: ${e.message}`);
-        ctx.reply(`Failed to setArbitragePosition: ${pInstance.positionDirection} ${pInstance.src1} ${pInstance.src1Market} ${pInstance.src1Symbol} vs ${pInstance.src2} ${pInstance.src2Market} ${pInstance.src2Symbol}`);
+        ctx.reply(`Can't connect to ${pInstance.src2}.\nFailed to setArbitragePosition: ${pInstance.positionDirection} ${pInstance.src1} ${pInstance.src1Market} ${pInstance.src1Symbol} vs ${pInstance.src2} ${pInstance.src2Market} ${pInstance.src2Symbol}`);
         return;
     }
 
 
-    let isFixedSymbols = false;
     try {
         pInstance.src1Symbol = b[pInstance.src1].fixSymbol(pInstance.src1Symbol, pInstance.src1Market);
-        pInstance.src2Symbol = b[pInstance.src2].fixSymbol(pInstance.src2Symbol, pInstance.src2Market);
-        isFixedSymbols = true;
     }
     catch (e) {
         console.error(`${new Date().toISOString()}\t${ctx.session.id}\tFailed to fixSymbol. Error: ${e.message}`);
+        ctx.reply(`${pInstance.src1} can't recognize symbol ${pInstance.src1Symbol}.\nFailed to setArbitragePosition: ${pInstance.positionDirection} ${pInstance.src1} ${pInstance.src1Market} ${pInstance.src1Symbol} vs ${pInstance.src2} ${pInstance.src2Market} ${pInstance.src2Symbol}`);
+        return;
     }
 
-    if(!pInstance.src1Symbol) {
-        console.error(`${new Date().toISOString()}\t${ctx.session.id}\tFailed to fixSymbol: ${pInstance.src1Market} ${pInstance.src1Symbol}.`);
-        isFixedSymbols = false;
+    try {
+        pInstance.src2Symbol = b[pInstance.src2].fixSymbol(pInstance.src2Symbol, pInstance.src2Market);
     }
-    if(!pInstance.src2Symbol) {
-        console.error(`${new Date().toISOString()}\t${ctx.session.id}\tFailed to fixSymbol: ${pInstance.src2Market} ${pInstance.src2Symbol}.`);
-        isFixedSymbols = false;
-    }
-
-    if(!isFixedSymbols) {
-        ctx.reply(`Failed to setArbitragePosition: ${pInstance.positionDirection} ${pInstance.src1} ${pInstance.src1Market} ${pInstance.src1Symbol} vs ${pInstance.src2} ${pInstance.src2Market} ${pInstance.src2Symbol}`);
+    catch (e) {
+        console.error(`${new Date().toISOString()}\t${ctx.session.id}\tFailed to fixSymbol. Error: ${e.message}`);
+        ctx.reply(`${pInstance.src2} can't recognize symbol ${pInstance.src2Symbol}.\nFailed to setArbitragePosition: ${pInstance.positionDirection} ${pInstance.src1} ${pInstance.src1Market} ${pInstance.src1Symbol} vs ${pInstance.src2} ${pInstance.src2Market} ${pInstance.src2Symbol}`);
         return;
     }
 
@@ -611,28 +616,48 @@ bot.command('position', async (ctx) => {
     }
 
     try {
-        if(await setArbitragePosition(pInstance, ctx.session.id)) {
-            addToMonitoringPool(pInstance,ctx.session.id);
-            addPositionToDb(ctx.session.id, ctx.session.username, pInstance);
-            await logToCSV(ctx.session.id, pInstance, {}, true);
-        }
-        else {
-            console.error(`${new Date().toISOString()}\t${ctx.session.id}\tFailed to setArbitragePosition: ${pInstance.positionId}`);
-            ctx.reply(`Failed to setArbitragePosition: ${pInstance.positionDirection} ${pInstance.src1} ${pInstance.src1Market} ${pInstance.src1Symbol} vs ${pInstance.src2} ${pInstance.src2Market} ${pInstance.src2Symbol}`);
-        }
+        await setArbitragePosition(pInstance, ctx.session.id);
+        addToMonitoringPool(pInstance,ctx.session.id);
     }
     catch (e) {
-        ctx.reply(`Failed to setArbitragePosition: ${pInstance.positionId}`);
+        ctx.reply(`${e.message}\nFailed to ${pInstance.positionDirection} ${pInstance.src1} ${pInstance.src1Market} ${pInstance.src1Symbol} vs ${pInstance.src2} ${pInstance.src2Market} ${pInstance.src2Symbol}`);
         console.error(`${new Date().toISOString()}\t${ctx.session.id}\tFailed to setArbitragePosition: ${pInstance.positionId}. Error: ${e.message}`);
+        return;
+    }
+    try {
+        addPositionToDb(ctx.session.id, ctx.session.username, pInstance);
+    }
+    catch (e) {
+        console.error(`${new Date().toISOString()}\t${ctx.session.id}\tFailed to add position to DB: ${pInstance.positionId}. Error: ${e.message}`);
+    }
+
+    try {
+        await logToCSV(ctx.session.id, pInstance, {}, true);
+    }
+    catch (e) {
+        console.error(`${new Date().toISOString()}\t${ctx.session.id}\tFailed to add log to CSV: ${pInstance.positionId}. Error: ${e.message}`);
     }
 });
 
-const getRatio = (source, symbol) => {
+const getRatio = (source_, symbol) => {
     let ratio= 1;
-    if(source === 'HL' && symbol.charAt(0) === 'k') {
+    const source = source_.toUpperCase();
+    if(source === 'HL' && symbol.toLowerCase().charAt(0) === 'k') {
         ratio = 1000;
     }
-    else if(source === 'BB' && symbol.includes('1000')) {
+    else if(symbol.startsWith('10000000') && ['BB'].includes(source)) {
+        ratio = 10000000;
+    }
+    else if(symbol.startsWith('1000000') && ['BB', 'MX'].includes(source)) {
+        ratio = 1000000;
+    }
+    else if(symbol.startsWith('100000') && ['MX'].includes(source)) {
+        ratio = 100000;
+    }
+    else if(symbol.startsWith('10000') && ['MX','BB'].includes(source)) {
+        ratio = 10000;
+    }
+    else if(symbol.startsWith('1000') && ['BB', 'MX', 'BN'].includes(source)) {
         ratio = 1000;
     }
     return ratio;

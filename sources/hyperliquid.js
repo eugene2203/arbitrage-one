@@ -9,6 +9,8 @@ const REST_INFO_HYPERLIQUID_URL="https://api.hyperliquid.xyz/info";
 
 const ZERO_LEVELS_REVERSE = [16, 8, 0];
 
+const kSYMBOLS = ['kNEIRO', 'kDOGS', 'kFLOKI', 'kLUNC', 'kBONK', 'kSHIB','kPEPE'];
+
 class Hyperliquid  extends BaseExchange {
   constructor(sessionId) {
     super(sessionId,"Hyperliquid", WSS_URLS);
@@ -144,29 +146,26 @@ class Hyperliquid  extends BaseExchange {
   }
 
   fixSymbol = (symbol_, market) => {
-    // console.warn('Hyperliquid fixSymbol', symbol_, market);
     let resSymbol = symbol_;
+    if(symbol_.toLowerCase().startsWith('k')) {
+      // We need to check if the coin is in the 'kilo' universe
+      if(kSYMBOLS.includes('k'+symbol_.slice(1).toUpperCase())) {
+        resSymbol = 'k'+symbol_.slice(1).toUpperCase();
+      }
+    }
     if(market === 'SPOT') {
       if(symbol_.toUpperCase() === 'PURR') {
         resSymbol = "PURR/USDC";
       }
       else if (!symbol_.startsWith('@')) {
-        resSymbol = this.mapCoinToSpotname[symbol_];
+        resSymbol = this.getSpotnameFromCoin(resSymbol);
       }
     }
-    // console.warn('Hyperliquid fixSymbol RESULT:', resSymbol, market);
+    if(!resSymbol) {
+      throw new Error(`Hyperliquid can't recognizes coin: ${symbol_} ${market}`);
+    }
     return resSymbol;
   }
-
-  // subscribe(symbol, market) {
-    // console.warn('Hyperliquid subscribe', symbol, market);
-    // return super.subscribe(symbol, market);
-  // }
-
-  // unsubscribe(symbol, market) {
-    // console.warn('Hyperliquid unsubscribe', symbol, market);
-    // super.unsubscribe(symbol, market);
-  // }
 
   onMessage = (market, event) => {
     const message = JSON.parse(event.data);
@@ -204,7 +203,7 @@ class Hyperliquid  extends BaseExchange {
       try {
         const data = JSON.parse(strJSON);
         if(data?.type === "l2Book") {
-          console.error(`${new Date().toISOString()}\t${this.sessionId}\tHyperliquid ${market} subscription to ${data.subscription.coin} failed:`, data.data);
+          console.error(`${new Date().toISOString()}\t${this.sessionId}\tHyperliquid ${market} subscription to ${data.coin} failed: ${JSON.stringify(data)}`);
         }
       } catch (e) {
         console.error(`${new Date().toISOString()}\t${this.sessionId}\tHyperliquid ${market} subscription error:`, e, message.data);

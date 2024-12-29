@@ -1,8 +1,5 @@
 import BaseExchange from "./base.js";
 
-
-import WebSocket from "ws";
-
 const WSS_URLS ={
   "SPOT": "wss://stream.bybit.com/v5/public/spot",
   "PERP": "wss://stream.bybit.com/v5/public/linear"
@@ -59,22 +56,9 @@ class Bybit extends BaseExchange {
   }
 
   fixSymbol = (symbol_, market) => {
-    let symbol = symbol_;
-    if(!symbol_.includes('USDT')) {
-      symbol = market === 'SPOT'? symbol_ + 'USDT' : symbol_+'USDT';
-    }
-    return symbol;
+    let symbol = symbol_.toUpperCase();
+    return symbol.includes('USDT') ? symbol : symbol + 'USDT';
   }
-
-  // subscribe = (symbol_, market) => {
-  //   const symbol = this.fixSymbol(symbol_, market);
-  //   return super.subscribe(symbol, market);
-  // }
-
-  // unsubscribe = (symbol_, market) => {
-  //   const symbol = this.fixSymbol(symbol_, market);
-  //   super.unsubscribe(symbol, market);
-  // }
 
   onMessage(market, event) {
     const message = JSON.parse(event.data);
@@ -147,7 +131,7 @@ class Bybit extends BaseExchange {
     }
     else if(message.success === false && message.op === 'subscribe' && message.ret_msg) {
       const _symbol = message.ret_msg.replace('Invalid symbol :[orderbook.50.', '').replace(']','');
-      console.error(`${new Date().toISOString()}\t${this.sessionId}\tBybit ${market} ${_symbol} invalid symbol: ${message.ret_msg}`);
+      console.error(`${new Date().toISOString()}\t${this.sessionId}\tBybit ${market} ${_symbol} error: ${message.ret_msg}`);
       _symbol && this.symbols[market] && delete this.symbols[market][_symbol];
       _symbol && this.snapshots[market] && delete this.snapshots[market][_symbol];
     }

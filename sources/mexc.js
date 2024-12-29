@@ -63,23 +63,13 @@ class Mexc extends BaseExchange {
   }
 
   fixSymbol = (symbol_, market) => {
-    let symbol = symbol_;
+    let symbol = symbol_.toUpperCase();
 
-    if(!symbol_.includes('USDT')) {
+    if(!symbol.includes('USDT')) {
       symbol = (market === 'SPOT')? symbol_ + 'USDT' : symbol_+'_USDT';
     }
     return symbol;
   }
-
-  // subscribe(symbol_, market) {
-  //   const symbol = this.fixSymbol(symbol_, market);
-  //   return super.subscribe(symbol, market);
-  // }
-
-  // unsubscribe(symbol_, market) {
-    // const symbol = this.fixSymbol(symbol_, market);
-    // super.unsubscribe(symbol, market);
-  // }
 
   onMessage = (market, event) => {
     const message = JSON.parse(event.data);
@@ -141,6 +131,14 @@ class Mexc extends BaseExchange {
     }
     else if (message.channel === "rs.error" && message.data?.startsWith('Contract [') && message.data?.endsWith('not exists')) {
       const _symbol = message.data.replace('Contract [', '').replace('] not exists', '');
+      console.error(`${new Date().toISOString()}\t${this.sessionId}\tMexc ${market} ${_symbol} error: ${message.data}`);
+      _symbol && this.symbols[market] && delete this.symbols[market][_symbol];
+      _symbol && this.symbols[market] && delete this.snapshots[market][_symbol];
+    }
+    else if (message.msg && message.msg.startsWith('Not Subscribed successfully!')) {
+      const _t1 = message.msg.replace('Not Subscribed successfully! [spot@public.limit.depth.v3.api@', '');
+      const _symbol = _t1.slice(0, _t1.indexOf('@'));
+      console.error(`${new Date().toISOString()}\t${this.sessionId}\tMexc ${market} ${_symbol} error: ${message.msg}`);
       _symbol && this.symbols[market] && delete this.symbols[market][_symbol];
       _symbol && this.symbols[market] && delete this.snapshots[market][_symbol];
     }

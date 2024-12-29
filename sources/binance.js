@@ -26,20 +26,18 @@ class Binance extends BaseExchange {
 
   _getUnsubscribeRequest()  {
     return {
-      "SPOT": {},
-      "PERP": {}
+      "SPOT": {
+        "method": "UNSUBSCRIBE",
+        "params": ["${symbol}@depth20@1000ms"],
+        "id":null
+      },
+      "PERP": {
+        "method": "UNSUBSCRIBE",
+        "params": ["${symbol}@depth20@500ms"],
+        "id":null
+      }
     }
   }
-
-  // async subscribe(symbol_, market) {
-    // const symbol = this.fixSymbol(symbol_);
-    // return super.subscribe(symbol, market);
-  // }
-
-  // async unsubscribe(symbol_, market) {
-  //   const symbol = this.fixSymbol(symbol_);
-  //   await super.unsubscribe(symbol, market);
-  // }
 
   onMessage(market, event) {
     const message = JSON.parse(event.data);

@@ -63,7 +63,6 @@ class BaseExchange {
   sendPing (market) {
     if(this.pingRequest[market] && Object.keys(this.pingRequest[market]).length > 0 && this.ws[market] && this.ws[market].readyState === WebSocket.OPEN) {
       this.ws[market].send(JSON.stringify(this.pingRequest[market]));
-      // console.log(`${new Date().toISOString()}\t${this.sessionId}\t${this.name} ${market} Sent ping.`, this.pingRequest[market]);
     }
   }
 
@@ -71,7 +70,6 @@ class BaseExchange {
     if(this.name === 'Binance') {
       if(this.ws[market] && this.ws[market].readyState === WebSocket.OPEN) {
         this.ws[market].pong(data);
-        // console.log(`${new Date().toISOString()}\t${this.sessionId}\t${this.name} ${market} Sent pong.`, data.toString());
       }
     }
   }
@@ -126,7 +124,6 @@ class BaseExchange {
       let _tmr2= setTimeout(() => {
         clearInterval(_tmr);
         console.error(`${new Date().toISOString()}\t${this.sessionId}\t${this.name} ${market} subscribe to ${symbol} failed.`);
-        console.error(`${new Date().toISOString()}\t${this.sessionId}\t${this.name} ${market} ${symbol}`, this.symbols[market] && this.symbols[market][symbol]);
         this.symbols[market] && delete this.symbols[market][symbol];
         this.snapshots[market] && delete this.snapshots[market][symbol];
         reject(`Can't subscribe to ${this.name} ${symbol} in ${market}`);
@@ -225,7 +222,6 @@ class BaseExchange {
           }
           ws.onmessage = (event) => this.onMessage(market, event);
           ws.on('ping', (data) => {
-            // console.log(`${new Date().toISOString()}\t${this.sessionId}\t${this.name} ${market} PING received:`, data.toString());
             this.sendPong && typeof this.sendPong === "function" && this.sendPong(market, data);
           });
           this.ws[market] = ws;
@@ -264,11 +260,9 @@ class BaseExchange {
   }
 
   _checkAlive = (market) => {
-    // console.warn(`_checkAlive BEGIN`, this.name, market);
     if(this.ws[market] && this.ws[market].readyState === WebSocket.OPEN) {
       this.sendPing && typeof this.sendPing === "function" && this.sendPing(market);
       for (const symbol of Object.keys(this.symbols[market])) {
-        // console.warn(`_checkAlive start`, this.name, market, symbol, this.symbols[market][symbol]);
         if (this.symbols[market][symbol].subscribed > 0) {
           if(this.symbols[market][symbol].cntMessages > this.symbols[market][symbol].lastMonitoredCntMessages) {
             this.symbols[market][symbol].lastMonitoredCntMessages = this.symbols[market][symbol].cntMessages;
@@ -281,10 +275,8 @@ class BaseExchange {
             }
           }
         }
-        // console.warn(`_checkAlive complete`, this.name, market, symbol, this.symbols[market][symbol]);
       }
     }
-    // console.warn(`_checkAlive END`, this.name, market);
   }
 }
 
