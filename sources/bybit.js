@@ -3,7 +3,9 @@ import BaseExchange from "./base.js";
 const WSS_URLS ={
   "SPOT": "wss://stream.bybit.com/v5/public/spot",
   "PERP": "wss://stream.bybit.com/v5/public/linear"
-};
+}
+
+const API_INFO_URL = "https://api.bybit.com/v5";
 
 class Bybit extends BaseExchange {
   constructor(sessionId) {
@@ -17,7 +19,20 @@ class Bybit extends BaseExchange {
         "op": "ping"
       }
     });
+    this.coinList = {
+      'SPOT':[],
+      'PERP':[]
+    }
+  }
 
+  async init(market) {
+    if(!market || market === 'PERP') {
+      await this._createPerpMetaInfo();
+    }
+    if(!market || market === 'SPOT') {
+      await this._createSpotMetaInfo();
+    }
+    console.log(`${new Date().toISOString()}\t${this.sessionId}\tBybit ${market || "BOTH"} init completed.`);
   }
 
   _getSubscribeRequest() {
@@ -43,6 +58,51 @@ class Bybit extends BaseExchange {
         "op": "unsubscribe",
         "args": ["orderbook.50.${symbol}"]
       }
+    }
+  }
+
+  _createSpotMetaInfo = async () => {
+    try {
+      const response = await fetch(API_INFO_URL + `/market/instruments-info?category=spot`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+      });
+      const data = await response.json();
+      if(data?.retCode === 0 && Array.isArray(data.result?.list)) {
+        this.coinList['SPOT'] = data.result.list.map((item) => item.symbol);
+        console.log(`${new Date().toISOString()}\t${this.sessionId}\tBybit SPOT meta info created. ${this.coinList['SPOT'].length} coins.`);
+      }
+    }
+    catch (e) {
+      console.error(`${new Date().toISOString()}\t${this.sessionId}\tBybit _createSpotMetaInfo error:`, e.message);
+    }
+  }
+
+  _createPerpMetaInfo = async () => {
+    try {
+      let cursorPart = '';
+      let data = null;
+      do {
+        const response = await fetch(API_INFO_URL + `/market/instruments-info?category=linear${cursorPart}`, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+        });
+        data = await response.json();
+        if (data?.retCode === 0 && Array.isArray(data.result?.list)) {
+          this.coinList['PERP'] = [...this.coinList['PERP'], ...data.result.list.map((item) => item.symbol)];
+          console.log(`${new Date().toISOString()}\t${this.sessionId}\tPart of Bybit PERP meta info created. ${this.coinList['PERP'].length} coins.`);
+        }
+        if (data.result?.nextPageCursor) {
+          cursorPart = `&cursor=${data.result.nextPageCursor}`;
+        }
+      } while(data.result?.nextPageCursor && data.result?.nextPageCursor !== '');
+    }
+    catch (e) {
+      console.error(`${new Date().toISOString()}\t${this.sessionId}\tBybit _createPerpMetaInfo error:`, e.message);
     }
   }
 
@@ -135,6 +195,20 @@ class Bybit extends BaseExchange {
       _symbol && this.symbols[market] && delete this.symbols[market][_symbol];
       _symbol && this.snapshots[market] && delete this.snapshots[market][_symbol];
     }
+  }
+
+  async connect(market) {
+    if(!this.coinList[market] || this.coinList[market].length === 0) {
+      await this.init(market);
+    }
+    return super.connect(market);
+  }
+
+  async subscribe(symbol, market) {
+    if(!this.coinList[market] || !this.coinList[market].includes(symbol)) {
+      throw new Error(`Bybit ${market} can't recognizes coin: ${symbol}`);
+    }
+    return super.subscribe(symbol, market);
   }
 }
 

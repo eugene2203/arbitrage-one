@@ -43,6 +43,8 @@ class BaseExchange {
     this.pingRequest={"SPOT": '', "PERP": ''};
   }
 
+  async init() {}
+
   setKeepAlive(market, value) {
     this.keepAlive[market] = value;
   }

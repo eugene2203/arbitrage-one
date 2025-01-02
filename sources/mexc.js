@@ -1,12 +1,12 @@
 import BaseExchange from "./base.js";
 
-
-import WebSocket from "ws";
-
 const WSS_URLS ={
   "SPOT": "wss://wbs.mexc.com/ws",
   "PERP": "wss://contract.mexc.com/edge"
-};
+}
+
+const SPOT_API_INFO_URL = "https://api.mexc.com";
+const PERP_API_INFO_URL = "https://contract.mexc.com";
 
 class Mexc extends BaseExchange {
   constructor(sessionId) {
@@ -20,7 +20,22 @@ class Mexc extends BaseExchange {
         "method": "ping"
       }
     });
+    this.coinList = {
+      'SPOT':[],
+      'PERP':[]
+    }
   }
+
+  async init(market) {
+    if(!market || market === 'PERP') {
+      await this._createPerpMetaInfo();
+    }
+    if(!market || market === 'SPOT') {
+      await this._createSpotMetaInfo();
+    }
+    console.log(`${new Date().toISOString()}\t${this.sessionId}\tMexc ${market || "BOTH"} init completed.`);
+  }
+
 
   _getSubscribeRequest() {
     return {
@@ -54,6 +69,45 @@ class Mexc extends BaseExchange {
     }
   }
 
+  _createSpotMetaInfo = async () => {
+    try {
+      const response = await fetch(SPOT_API_INFO_URL + `/api/v3/defaultSymbols`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+      });
+      const data = await response.json();
+      if(data?.code === 0 && Array.isArray(data.data)) {
+        this.coinList['SPOT'] = data.data;
+        console.log(`${new Date().toISOString()}\t${this.sessionId}\tMexc SPOT meta info created. ${this.coinList['SPOT'].length} coins.`);
+      }
+    }
+    catch (e) {
+      console.error(`${new Date().toISOString()}\t${this.sessionId}\tMexc _createSpotMetaInfo error:`, e.message);
+    }
+  }
+
+  _createPerpMetaInfo = async () => {
+    try {
+      const response = await fetch(PERP_API_INFO_URL + `/api/v1/contract/detail`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+      });
+      const data = await response.json();
+      if(data?.code === 0 && Array.isArray(data.data)) {
+        this.coinList['PERP'] = data.data.map((item) => item.symbol);
+        console.log(`${new Date().toISOString()}\t${this.sessionId}\tMexc PERP meta info created. ${this.coinList['PERP'].length} coins.`);
+      }
+    }
+    catch (e) {
+      console.error(`${new Date().toISOString()}\t${this.sessionId}\tMexc _createPerpMetaInfo error:`, e.message);
+    }
+  }
+
+
   setKeepAlive(market, value) {
     this.keepAlive[market] = value;
   }
@@ -66,7 +120,7 @@ class Mexc extends BaseExchange {
     let symbol = symbol_.toUpperCase();
 
     if(!symbol.includes('USDT')) {
-      symbol = (market === 'SPOT')? symbol_ + 'USDT' : symbol_+'_USDT';
+      symbol = (market === 'SPOT')? symbol + 'USDT' : symbol+'_USDT';
     }
     return symbol;
   }
@@ -143,6 +197,22 @@ class Mexc extends BaseExchange {
       _symbol && this.symbols[market] && delete this.snapshots[market][_symbol];
     }
   }
+
+  async connect(market) {
+    if(!this.coinList[market] || this.coinList[market].length === 0) {
+      await this.init(market);
+    }
+    return super.connect(market);
+  }
+
+  async subscribe(symbol, market) {
+    if(!this.coinList[market] || !this.coinList[market].includes(symbol)) {
+      throw new Error(`Mexc ${market} can't recognizes coin: ${symbol}`);
+    }
+    return super.subscribe(symbol, market);
+  }
+
+
 }
 
 export default Mexc;

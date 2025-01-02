@@ -1,4 +1,6 @@
 import BaseExchange from "./base.js";
+import {sleep} from "../utils/utils.js";
+
 
 const WSS_URLS = {
   'SPOT': 'wss://api.hyperliquid.xyz/ws',
@@ -17,6 +19,17 @@ class Hyperliquid  extends BaseExchange {
     super.setSubscribeUnsubscribeRequests(this._getSubscribeRequest(), this._getUnsubscribeRequest());
     this.mapCoinToSpotname = {};
     this.mapSpotnameToCoin = {};
+    this.coinList = [];
+  }
+
+  async init(market) {
+    if(!market || market === 'PERP') {
+      await this._createPerpMetaInfo();
+    }
+    if(!market || market === 'SPOT') {
+      await this._createSpotMetaInfo();
+    }
+    console.log(`${new Date().toISOString()}\t${this.sessionId}\tHyperliquid ${market || "BOTH"} init completed.`);
   }
 
   _getSubscribeRequest() {
@@ -65,12 +78,10 @@ class Hyperliquid  extends BaseExchange {
     return this.mapSpotnameToCoin[spotname];
   }
 
-  getFundingRatesAfter0Level = async (coin, market='PERP') => {
+  _getFundingRatesAfter0Level = async (coin, market='PERP') => {
     const dt = new Date();
     const dtStartDay = new Date(dt);
     dtStartDay.setHours(0,0,0,0);
-    // console.log('dtStartDay', new Date(dtStartDay));
-    // console.log('dt', dt);
     let dtStartFundingPeriod = dtStartDay;
     for(const hours of ZERO_LEVELS_REVERSE) {
       if(dt.getTime() > dtStartDay.getTime() + hours * 60 * 60 * 1000) {
@@ -78,22 +89,21 @@ class Hyperliquid  extends BaseExchange {
         break;
       }
     }
-    // console.log('dtStartFundingPeriod', new Date(dtStartFundingPeriod));
-
+    let body;
     try {
+      body = JSON.stringify({
+        "type": "fundingHistory",
+        "coin": coin,
+        "startTime": dtStartFundingPeriod,
+      })
       const response = await fetch(REST_INFO_HYPERLIQUID_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({
-          "type": "fundingHistory",
-          "coin": coin,
-          "startTime": dtStartFundingPeriod,
-        })
+        body: body
       });
       const data = await response.json();
-      // console.log(data);
       let fundingSum = 0;
       if (data && Array.isArray(data)) {
         fundingSum = data.reduce((acc, obj) => {
@@ -103,9 +113,21 @@ class Hyperliquid  extends BaseExchange {
       return { hours: data.length, fundingRate: Math.round(fundingSum*100000000)/1000000 };
     }
     catch (e) {
-      console.error(`${new Date().toISOString()}\t${this.sessionId}\tHyperliquid ${market} getFundingRatesLast8h error:`, e.message);
+      console.error(`${new Date().toISOString()}\t${this.sessionId}\tHyperliquid ${market} getFundingRatesLast8h(${body}) error:`, e.message);
       return null;
     }
+  }
+
+  // 3 attempts to get the funding rate
+  getFundingRatesAfter0Level = async (coin, market='PERP') => {
+    for(let attempts=0; attempts<3; attempts++) {
+      const _response = await this._getFundingRatesAfter0Level(coin, market);
+      if(_response !== null) {
+        return _response;
+      }
+      await sleep(100);
+    }
+    return null;
   }
 
   _createSpotMetaInfo = async () => {
@@ -130,10 +152,33 @@ class Hyperliquid  extends BaseExchange {
             this.mapSpotnameToCoin[universeInfo.name] = coin;
           }
         }
+        console.log(`${new Date().toISOString()}\t${this.sessionId}\tHyperliquid SPOT meta info created. ${Object.keys(this.mapCoinToSpotname).length} coins.`);
       }
     }
     catch (e) {
       console.error(`${new Date().toISOString()}\t${this.sessionId}\tHyperliquid getSpotMetaInfo error:`, e.message);
+    }
+  }
+
+  _createPerpMetaInfo = async () => {
+    try {
+      const response = await fetch(REST_INFO_HYPERLIQUID_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          "type": "meta"
+        })
+      });
+      const data = await response.json();
+      if(data.universe && Array.isArray(data.universe)) {
+        this.coinList = data.universe.map((item) => item.name);
+        console.log(`${new Date().toISOString()}\t${this.sessionId}\tHyperliquid PERP meta info created. ${this.coinList.length} coins.`);
+      }
+    }
+    catch (e) {
+      console.error(`${new Date().toISOString()}\t${this.sessionId}\tHyperliquid getPerpMetaInfo error:`, e.message);
     }
   }
 
@@ -147,22 +192,30 @@ class Hyperliquid  extends BaseExchange {
 
   fixSymbol = (symbol_, market) => {
     let resSymbol = symbol_;
-    if(symbol_.toLowerCase().startsWith('k')) {
-      // We need to check if the coin is in the 'kilo' universe
-      if(kSYMBOLS.includes('k'+symbol_.slice(1).toUpperCase())) {
-        resSymbol = 'k'+symbol_.slice(1).toUpperCase();
-      }
-    }
     if(market === 'SPOT') {
       if(symbol_.toUpperCase() === 'PURR') {
         resSymbol = "PURR/USDC";
       }
       else if (!symbol_.startsWith('@')) {
-        resSymbol = this.getSpotnameFromCoin(resSymbol);
+        resSymbol = this.getSpotnameFromCoin(resSymbol.toUpperCase());
+      }
+    }
+    else if(market === 'PERP') {
+      if(resSymbol.toLowerCase().startsWith('k')) {
+        // We need to check if the coin is in the 'kilo' universe
+        if(kSYMBOLS.includes('k'+symbol_.slice(1).toUpperCase())) {
+          resSymbol = 'k'+symbol_.slice(1).toUpperCase();
+        }
+        else {
+          resSymbol = resSymbol.toUpperCase();
+        }
+      }
+      else {
+        resSymbol = resSymbol.toUpperCase();
       }
     }
     if(!resSymbol) {
-      throw new Error(`Hyperliquid can't recognizes coin: ${symbol_} ${market}`);
+      throw new Error(`Hyperliquid ${market} can't recognizes coin: ${symbol_}`);
     }
     return resSymbol;
   }
@@ -212,13 +265,23 @@ class Hyperliquid  extends BaseExchange {
   }
 
   async connect(market) {
-    // console.warn('Hyperliquid connect', market, Object.keys(this.mapCoinToSpotname));
     if(market === 'SPOT' && Object.keys(this.mapCoinToSpotname).length === 0) {
       await this._createSpotMetaInfo();
-      // console.warn('Hyperliquid connect SPOT _createSpotMetaInfo completed');
-      // console.log(this.mapCoinToSpotname);
+    }
+    if(market === 'PERP' && this.coinList.length === 0) {
+      await this._createPerpMetaInfo();
     }
     return super.connect(market);
+  }
+
+  async subscribe(symbol, market) {
+    if(market === 'PERP' && !this.coinList.includes(symbol)) {
+      throw new Error(`Hyperliquid PERP can't recognizes coin: ${symbol}`);
+    }
+    if(market === 'SPOT' && !this.mapCoinToSpotname[symbol]) {
+      throw new Error(`Hyperliquid SPOT can't recognizes coin: ${symbol}`);
+    }
+    return super.subscribe(symbol, market);
   }
 }
 

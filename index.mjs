@@ -8,10 +8,9 @@ import { dataSources, TELEGRAM_BOT_TOKEN, ADMIN_IDS } from './utils/config.js';
 import {
     addPositionToDb,
     deletePositionFromDb,
-    deleteAllPositionsFromDb,
     selectAllPositionsFromDb
 } from './utils/db.js';
-import { formatter } from './utils/utils.js';
+import {formatter, sleep} from './utils/utils.js';
 
 const dataSourceKeys = Object.keys(dataSources);
 
@@ -59,7 +58,7 @@ const bot = b.bot;
 
 
 bot.use(session());
-bot.use((ctx, next) => {
+bot.use(async (ctx, next) => {
     if(ctx.session?.id !== ctx.from.id) {
         ctx.session = {
             id: ctx.from.id,
@@ -69,6 +68,7 @@ bot.use((ctx, next) => {
     for(const src of Object.keys(dataSources)) {
         if(!b[src] || !(typeof b[src].connect === "function")) {
             b[src] = new dataSources[src]();
+            await b[src].init();
             console.log(`${new Date().toISOString()}\t${ctx.session.id}\tBotInstance ${b[src].name} created.`);
         }
     }
@@ -214,7 +214,7 @@ const setArbitragePosition = async (positionInstance, sessionId=0) => {
     }
 
     try {
-        await bot.telegram.sendMessage(sessionId, `<b><u>Start monitoring</u>:</b>\n` +
+        await bot.telegram.sendMessage(sessionId, `<b><u>Start monitoring</u> ${positionInstance.positionDirection} position:</b>\n` +
           `<b>${positionInstance.src1} <u>${positionInstance.src1Market}</u></b> <b>${positionInstance.src1Symbol} <b><u>${positionInstance.src1AskBid}</u></b> vs ${positionInstance.src2} <u>${positionInstance.src2Market}</u></b> <b>${positionInstance.src2Symbol} <u>${positionInstance.src2AskBid}</u></b>.\n` +
           `Wait for delta: <b>${positionInstance.MONITORING_DELTA}</b>%\n` +
           `Duration of delta: <b>${positionInstance.targetSuccessTime / 1000 / 60} min</b>\n` +
@@ -235,10 +235,6 @@ const setArbitragePosition = async (positionInstance, sessionId=0) => {
         await monitorAction(positionInstance, sessionId);
     }, positionInstance.MONITORING_INTERVAL);
     return true;
-}
-
-const clearAllPositionData = (positionId, sessionId) => {
-    delete b.monitoringPools[sessionId][positionId];
 }
 
 const monitorAction = async (positionInstance, sessionId) => {
@@ -375,12 +371,6 @@ const deleteFromMonitoringPool = (positionInstance, sessionId) => {
     delete b.monitoringPools[sessionId][positionInstance.positionId];
 }
 
-const clearMonitoringPool = (sessionId) => {
-    for(const positionInstance of Object.values(b.monitoringPools[sessionId])) {
-        deleteFromMonitoringPool(positionInstance,sessionId);
-    }
-}
-
 const restorePositions = async () => {
     console.log(`${new Date().toISOString()}\tRestoring positions...`);
     const positions = selectAllPositionsFromDb()
@@ -407,6 +397,7 @@ const restorePositions = async () => {
         for(let index= 1; index <= 2; index++) {
             if (!b[positionInstance[`src${index}`]] || !(typeof b[positionInstance[`src${index}`]].connect === "function")) {
                 b[positionInstance[`src${index}`]] = new dataSources[positionInstance[`src${index}`]]();
+                await b[positionInstance[`src${index}`]].init()
                 console.log(`${new Date().toISOString()}\t${sessionId}\tBotInstance ${b[positionInstance[`src${index}`]].name} created.`);
             }
             try {
@@ -476,16 +467,23 @@ bot.command('help', (ctx) => {
       '<b>/help</b>\n');
 });
 
-bot.hears('Stop all', (ctx) => {
-    clearMonitoringPool(ctx.session.id);
-    deleteAllPositionsFromDb(ctx.session.id);
+const commandStopAllPositions = async (ctx) => {
+    for( const positionInstance of Object.values(b.monitoringPools[ctx.session.id])) {
+        await stopPositionByID(positionInstance.positionId, ctx.session.id);
+        await sleep(30);
+    }
+}
+
+bot.hears('Stop all', async (ctx) => {
+    await commandStopAllPositions(ctx);
     console.log(`${new Date().toISOString()}\t${ctx.session.id}\tAll positions are closed.`);
     ctx.reply('All positions are closed.');
-
 });
 
 bot.command('disconnect', async (ctx) => {
-    clearMonitoringPool(ctx.session.id);
+    await commandStopAllPositions(ctx);
+    console.log(`${new Date().toISOString()}\t${ctx.session.id}\tAll positions are closed.`);
+    ctx.reply('All positions are closed.');
 });
 
 bot.command('position', async (ctx) => {
@@ -739,9 +737,12 @@ const commandStatus = async (ctx) => {
                 if(oFunding?.hours && oFunding?.fundingRate) {
                     str += `<b>Funding</b> for latest <b>${oFunding.hours}</b> hours = <b><u>${oFunding.fundingRate}</u></b>%\n`;
                 }
+                else {
+                    str += `<b>Funding</b>  = <b><u>Not calculated yet</u></b>%\n`;
+                }
             }
             const _d = positionInstance.latestSuccessData.start ? formatter.format(positionInstance.latestSuccessData.start) : 'Never';
-            ctx.replyWithHTML(`<b><u>Status:</u></b>\n`+
+            ctx.replyWithHTML(`<b><u>Status:</u> ${positionInstance.positionDirection} position</b>\n`+
               `${str}\n`+
               `Latest success: <b>${_d}</b>\n`+
               `Duration: <b>${positionInstance.latestSuccessData.duration || '0 min'}</b> of <b>${positionInstance.targetSuccessTime/1000/60} min</b>\n\n`+

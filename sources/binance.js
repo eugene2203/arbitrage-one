@@ -5,11 +5,67 @@ const WSS_URLS = {
   'PERP': 'wss://fstream.binance.com/stream'
 };
 
+const SPOT_API_INFO_URL = "https://data-api.binance.vision";
+const PERP_API_INFO_URL = "https://fapi.binance.com";
+
 class Binance extends BaseExchange {
   constructor(sessionId) {
     super(sessionId,"Binance", WSS_URLS);
     super.setSubscribeUnsubscribeRequests(this._getSubscribeRequest(), this._getUnsubscribeRequest());
+    this.coinList = {
+      'SPOT':[],
+      'PERP':[]
+    }
   }
+
+  async init(market) {
+    if(!market || market === 'PERP') {
+      await this._createPerpMetaInfo();
+    }
+    if(!market || market === 'SPOT') {
+      await this._createSpotMetaInfo();
+    }
+    console.log(`${new Date().toISOString()}\t${this.sessionId}\tBinance ${market || "BOTH"} init completed.`);
+  }
+
+  _createSpotMetaInfo = async () => {
+    try {
+      const response = await fetch(SPOT_API_INFO_URL + `/api/v3/ticker/price`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+      });
+      const data = await response.json();
+      if(data && Array.isArray(data)) {
+        this.coinList['SPOT'] = data.map((item) => item.symbol.toLowerCase());
+        console.log(`${new Date().toISOString()}\t${this.sessionId}\tBinance SPOT meta info created. ${this.coinList['SPOT'].length} coins.`);
+      }
+    }
+    catch (e) {
+      console.error(`${new Date().toISOString()}\t${this.sessionId}\tBinance _createSpotMetaInfo error:`, e.message);
+    }
+  }
+
+  _createPerpMetaInfo = async () => {
+    try {
+      const response = await fetch(PERP_API_INFO_URL + `/fapi/v2/ticker/price`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+      });
+      const data = await response.json();
+      if(data && Array.isArray(data)) {
+        this.coinList['PERP'] = data.filter(item => item.symbol.endsWith('USDT')).map((item) => item.symbol.toLowerCase());
+        console.log(`${new Date().toISOString()}\t${this.sessionId}\tBinance PERP meta info created. ${this.coinList['SPOT'].length} coins.`);
+      }
+    }
+    catch (e) {
+      console.error(`${new Date().toISOString()}\t${this.sessionId}\tBinance _createPerpMetaInfo error:`, e.message);
+    }
+  }
+
 
   _getSubscribeRequest() {
     return {
@@ -96,6 +152,21 @@ class Binance extends BaseExchange {
   fixSymbol(symbol_) {
     return (symbol_.toUpperCase().includes('USDT'))? symbol_.toLowerCase() : symbol_.toLowerCase() + 'usdt';
   }
+
+  async connect(market) {
+    if(!this.coinList[market] || this.coinList[market].length === 0) {
+      await this.init(market);
+    }
+    return super.connect(market);
+  }
+
+  async subscribe(symbol, market) {
+    if(!this.coinList[market] || !this.coinList[market].includes(symbol)) {
+      throw new Error(`Binance ${market} can't recognizes coin: ${symbol}`);
+    }
+    return super.subscribe(symbol, market);
+  }
+
 }
 
 export default Binance;

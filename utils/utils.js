@@ -16,3 +16,5 @@ class FormatterDate {
   }
 }
 export const formatter = new FormatterDate();
+
+export const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
