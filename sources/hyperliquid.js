@@ -278,8 +278,8 @@ class Hyperliquid  extends BaseExchange {
     if(market === 'PERP' && !this.coinList.includes(symbol)) {
       throw new Error(`Hyperliquid PERP can't recognizes coin: ${symbol}`);
     }
-    if(market === 'SPOT' && !this.mapCoinToSpotname[symbol]) {
-      throw new Error(`Hyperliquid SPOT can't recognizes coin: ${symbol}`);
+    if(market === 'SPOT' && !this.mapSpotnameToCoin[symbol]) {
+      throw new Error(`Hyperliquid SPOT can't recognizes coin: ${this.mapSpotnameToCoin[symbol]}`);
     }
     return super.subscribe(symbol, market);
   }
