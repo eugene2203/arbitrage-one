@@ -53,7 +53,7 @@ class BaseExchange {
     this.debug = value;
   }
 
-  setSubscribeUnsubscribeRequests(subscribeRequest, unsubscribeRequest) {
+    setSubscribeUnsubscribeRequests(subscribeRequest, unsubscribeRequest) {
     this.subscribeRequest = subscribeRequest;
     this.unsubscribeRequest = unsubscribeRequest;
   }
@@ -160,6 +160,10 @@ class BaseExchange {
     Object.keys(this.symbols[market]).map((symbol) => {
       this.unsubscribe(symbol, market);
     });
+  }
+
+  getRatio(symbol, market) {
+    return 1;
   }
 
   async restore(market) {

@@ -28,6 +28,14 @@ class Binance extends BaseExchange {
     console.log(`${new Date().toISOString()}\t${this.sessionId}\tBinance ${market || "BOTH"} init completed.`);
   }
 
+  getRatio(symbol, market) {
+    let ratio = 1;
+    if(symbol.startsWith('1000')) {
+      ratio = 1000;
+    }
+    return ratio;
+  }
+
   _createSpotMetaInfo = async () => {
     try {
       const response = await fetch(SPOT_API_INFO_URL + `/api/v3/ticker/price`, {

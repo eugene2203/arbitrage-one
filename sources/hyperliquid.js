@@ -32,6 +32,15 @@ class Hyperliquid  extends BaseExchange {
     console.log(`${new Date().toISOString()}\t${this.sessionId}\tHyperliquid ${market || "BOTH"} init completed.`);
   }
 
+  getRatio(symbol, market) {
+    if(symbol.toLowerCase().charAt(0) === 'k' && kSYMBOLS.includes('k'+symbol.slice(1).toUpperCase())) {
+      return 1000;
+    }
+    else {
+      return 1
+    }
+  }
+
   _getSubscribeRequest() {
     return {
       "SPOT": {
@@ -121,7 +130,7 @@ class Hyperliquid  extends BaseExchange {
   // 3 attempts to get the funding rate
   getFundingRatesAfter0Level = async (coin, market='PERP') => {
     for(let attempts=0; attempts<3; attempts++) {
-      const _response = await this._getFundingRatesAfter0Level(coin, market);
+      const _response = await this._getFundingRatesAfter0Level(coin, market );
       if(_response !== null) {
         return _response;
       }

@@ -555,15 +555,15 @@ bot.command('position', async (ctx) => {
     const pInstance = JSON.parse(JSON.stringify(positionInstance));
 
     pInstance.src1 = src1.toUpperCase();
-    pInstance.src1Ratio = getRatio(src1, symbol1);
     pInstance.src1Symbol = symbol1;
     pInstance.src1Market = market1.toUpperCase();
+    pInstance.src1Ratio = b[pInstance.src1].getRatio(symbol1,pInstance.src1Market);
     pInstance.src1AskBid = askBid1.toUpperCase();
 
     pInstance.src2 = src2.toUpperCase();
-    pInstance.src2Ratio = getRatio(src2, symbol2);
     pInstance.src2Symbol = symbol2;
     pInstance.src2Market = market2.toUpperCase();
+    pInstance.src2Ratio = b[pInstance.src2].getRatio(symbol2,pInstance.src2Market);
     pInstance.src2AskBid = askBid2.toUpperCase();
 
     pInstance.positionDirection = direction.toUpperCase();
@@ -636,30 +636,6 @@ bot.command('position', async (ctx) => {
         console.error(`${new Date().toISOString()}\t${ctx.session.id}\tFailed to add log to CSV: ${pInstance.positionId}. Error: ${e.message}`);
     }
 });
-
-const getRatio = (source_, symbol) => {
-    let ratio= 1;
-    const source = source_.toUpperCase();
-    if(source === 'HL' && symbol.toLowerCase().charAt(0) === 'k') {
-        ratio = 1000;
-    }
-    else if(symbol.startsWith('10000000') && ['BB'].includes(source)) {
-        ratio = 10000000;
-    }
-    else if(symbol.startsWith('1000000') && ['BB', 'MX'].includes(source)) {
-        ratio = 1000000;
-    }
-    else if(symbol.startsWith('100000') && ['MX'].includes(source)) {
-        ratio = 100000;
-    }
-    else if(symbol.startsWith('10000') && ['MX','BB'].includes(source)) {
-        ratio = 10000;
-    }
-    else if(symbol.startsWith('1000') && ['BB', 'MX', 'BN'].includes(source)) {
-        ratio = 1000;
-    }
-    return ratio;
-}
 
 const stopPositionByID = (positionId, sessionId) => {
     if(positionId && b.monitoringPools[sessionId][positionId]) {

@@ -36,6 +36,22 @@ class Mexc extends BaseExchange {
     console.log(`${new Date().toISOString()}\t${this.sessionId}\tMexc ${market || "BOTH"} init completed.`);
   }
 
+  getRatio(symbol, market) {
+    let ratio = 1;
+    if(symbol.startsWith('1000000')) {
+      ratio = 1000000;
+    }
+    else if(symbol.startsWith('100000')) {
+      ratio = 100000;
+    }
+    else if(symbol.startsWith('10000')) {
+      ratio = 10000;
+    }
+    else if(symbol.startsWith('1000')) {
+      ratio = 1000;
+    }
+    return ratio;
+  }
 
   _getSubscribeRequest() {
     return {
