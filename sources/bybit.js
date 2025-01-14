@@ -124,10 +124,6 @@ class Bybit extends BaseExchange {
   }
 
 
-  setKeepAlive(market, value){
-    this.keepAlive[market] = value;
-  }
-
   setDebug(value) {
     this.debug = value;
   }

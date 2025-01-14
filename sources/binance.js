@@ -66,7 +66,10 @@ class Binance extends BaseExchange {
       const data = await response.json();
       if(data && Array.isArray(data)) {
         this.coinList['PERP'] = data.filter(item => item.symbol.endsWith('USDT')).map((item) => item.symbol.toLowerCase());
-        console.log(`${new Date().toISOString()}\t${this.sessionId}\tBinance PERP meta info created. ${this.coinList['SPOT'].length} coins.`);
+        console.log(`${new Date().toISOString()}\t${this.sessionId}\tBinance PERP meta info created. ${this.coinList['PERP'].length} coins.`);
+      }
+      else {
+        console.error(`${new Date().toISOString()}\t${this.sessionId}\tBinance _createPerpMetaInfo issue:`, response.data, response);
       }
     }
     catch (e) {

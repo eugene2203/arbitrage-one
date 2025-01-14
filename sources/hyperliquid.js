@@ -191,10 +191,6 @@ class Hyperliquid  extends BaseExchange {
     }
   }
 
-  setKeepAlive(value, market='PERP') {
-    this.keepAlive[market] = value;
-  }
-
   setDebug(value) {
     this.debug = value;
   }

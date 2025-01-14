@@ -4,7 +4,7 @@ import fsPromises from 'node:fs/promises';
 import fs from 'node:fs';
 import { spawn } from 'node:child_process';
 
-import { dataSources, TELEGRAM_BOT_TOKEN, ADMIN_IDS } from './utils/config.js';
+import { dataSources, TELEGRAM_BOT_TOKEN, ADMIN_IDS, VERSION } from './utils/config.js';
 import {
     addPositionToDb,
     deletePositionFromDb,
@@ -78,11 +78,6 @@ bot.use(async (ctx, next) => {
     }
     next();
 });
-
-
-// bot.command('testtest', async (ctx) => {
-//     console.log('testtest', await b['HL'].getFundingRatesAfter0Level('ETH'));
-// });
 
 
 /* Common functionality */
@@ -195,7 +190,7 @@ const stopTimer = (positionInstance) => {
     positionInstance?.timer && clearInterval(positionInstance.timer);
 }
 
-const setArbitragePosition = async (positionInstance, sessionId=0) => {
+const setArbitragePosition = async (positionInstance, sessionId=0, inRestoring=false) => {
     try {
         await b[positionInstance.src1].subscribe(positionInstance.src1Symbol, positionInstance.src1Market);
     }
@@ -213,17 +208,18 @@ const setArbitragePosition = async (positionInstance, sessionId=0) => {
         throw new Error(e);
     }
 
-    try {
-        await bot.telegram.sendMessage(sessionId, `<b><u>Start monitoring</u> ${positionInstance.positionDirection} position:</b>\n` +
-          `<b>${positionInstance.src1} <u>${positionInstance.src1Market}</u></b> <b>${positionInstance.src1Symbol} <b><u>${positionInstance.src1AskBid}</u></b> vs ${positionInstance.src2} <u>${positionInstance.src2Market}</u></b> <b>${positionInstance.src2Symbol} <u>${positionInstance.src2AskBid}</u></b>.\n` +
-          `Wait for delta: <b>${positionInstance.MONITORING_DELTA}</b>%\n` +
-          `Duration of delta: <b>${positionInstance.targetSuccessTime / 1000 / 60} min</b>\n` +
-          `PositionId: <b>${positionInstance.positionId}</b>`,
-          {parse_mode: 'HTML'}
-        );
-    }
-    catch (e) {
-        console.error(`${new Date().toISOString()}\t${sessionId}\tError sendMessage to Telegram: ${positionInstance.positionId}`,e);
+    if(!inRestoring) {
+        try {
+            await bot.telegram.sendMessage(sessionId, `<b><u>Start monitoring</u> ${positionInstance.positionDirection} position:</b>\n` +
+              `<b>${positionInstance.src1} <u>${positionInstance.src1Market}</u></b> <b>${positionInstance.src1Symbol} <b><u>${positionInstance.src1AskBid}</u></b> vs ${positionInstance.src2} <u>${positionInstance.src2Market}</u></b> <b>${positionInstance.src2Symbol} <u>${positionInstance.src2AskBid}</u></b>.\n` +
+              `Wait for delta: <b>${positionInstance.MONITORING_DELTA}</b>%\n` +
+              `Duration of delta: <b>${positionInstance.targetSuccessTime / 1000 / 60} min</b>\n` +
+              `PositionId: <b>${positionInstance.positionId}</b>`,
+              {parse_mode: 'HTML'}
+            );
+        } catch (e) {
+            console.error(`${new Date().toISOString()}\t${sessionId}\tError sendMessage to Telegram: ${positionInstance.positionId}`, e);
+        }
     }
 
     if(b.monitoringPools[sessionId] && b.monitoringPools[sessionId][positionInstance.positionId]) {
@@ -238,6 +234,14 @@ const setArbitragePosition = async (positionInstance, sessionId=0) => {
 }
 
 const monitorAction = async (positionInstance, sessionId) => {
+    if(b[positionInstance.src1].isBusy(positionInstance.src1Market)) {
+        // console.log(`${new Date().toISOString()}\t${sessionId}\t${positionInstance.positionId} | ${positionInstance.src1} ${positionInstance.src1Market} is busy.skipped`);
+        return;
+    }
+    if(b[positionInstance.src2].isBusy(positionInstance.src2Market)) {
+        // console.log(`${new Date().toISOString()}\t${sessionId}\t${positionInstance.positionId} | ${positionInstance.src2} ${positionInstance.srcMarket} is busy.skipped`);
+        return;
+    }
     const data = calculateArbitrage(positionInstance);
     if(!data) return;
     const Ask_Bid = (positionInstance.positionDirection === 'OPEN')? ['bid','ask'] : ['ask', 'bid'];
@@ -389,7 +393,7 @@ const restorePositions = async () => {
             if(row.username) {
                 usernameBlock = `Hi, <b>${row.username}</b>\n`;
             }
-            bot.telegram.sendMessage(sessionId, `${usernameBlock}We regret that the bot has to be restarted for technical reasons. <u>All your positions will be restored</u>.`,
+            bot.telegram.sendMessage(sessionId, `${usernameBlock}We regret that the bot has to be restarted for technical reasons. <u>All your positions will be restored</u>. Bot version: ${VERSION}`,
               {parse_mode: 'HTML'}
             );
         }
@@ -410,7 +414,7 @@ const restorePositions = async () => {
         }
         if(isRestored) {
             try {
-                await setArbitragePosition(positionInstance, sessionId);
+                await setArbitragePosition(positionInstance, sessionId, true);
                 addToMonitoringPool(positionInstance,sessionId);
             }
             catch (e) {
@@ -442,7 +446,7 @@ bot.start(async (ctx) => {
     if(ADMIN_IDS.includes(ctx.session.id)) {
         aButtons.push(['Restart Bot']);
     }
-    ctx.replyWithHTML(`Hi <u>${ctx.session.username}</u>!\nWelcome to <b>Spread_Arbitrage_Turtle_bot</b>!\nYour ID: ${ctx.session.id}\n${formatter.format(new Date())}`,
+    ctx.replyWithHTML(`Hi <u>${ctx.session.username}</u>!\nWelcome to <b>Spread_Arbitrage_Turtle_bot</b> v${VERSION}!\nYour ID: ${ctx.session.id}\n${formatter.format(new Date())}`,
       Markup.keyboard(aButtons).resize().oneTime(false).selective(false)
     );
 });
@@ -451,7 +455,7 @@ bot.command('help', (ctx) => {
     ctx.replyWithHTML('<u>Available commands</u>:\n' +
       '<b>/disconnect</b> - close all positions and disconnect from CEX/DEX\n' +
       '<b>/position [open/close] [src1] [symbol1] [src2] [market2] [symbol2] [delta?] [duration?] [volume?]</b> - create position for monitoring\n' +
-      ' src1 / src2 - one of HL, BB, MX\n'+
+      ' src1 / src2 - one of HL, BN, BB, MX\n'+
       ' symbol1 / symbol2 - symbols in format of CEX/DEX. Possible to miss USDT suffix. For example use PEPE instead of PEPEUSDT\n'+
       ' market2  - SPOT or PERP\n'+
       ' delta  - optional. If missed use 0.05\n'+
@@ -723,6 +727,7 @@ const commandStatus = async (ctx) => {
               `Latest success: <b>${_d}</b>\n`+
               `Duration: <b>${positionInstance.latestSuccessData.duration || '0 min'}</b> of <b>${positionInstance.targetSuccessTime/1000/60} min</b>\n\n`+
               `Position ID: ${positionInstance.positionId}`);
+            await sleep(100);
         }
         console.log(`------------------------------------------------------------------------------------------------`);
         console.log(`${new Date().toISOString()}\t${ctx.session.id}\t${positionInstance.src1} ${positionInstance.src1Market} ${positionInstance.src1Symbol}. Subscribed now: ${b[positionInstance.src1].symbols[positionInstance.src1Market][positionInstance.src1Symbol].subscribed}`);
@@ -773,7 +778,7 @@ bot.on('callback_query', (ctx) => {
 
 
 bot.launch( {dropPendingUpdates: true}, () => {
-    console.log(`${new Date().toISOString()}\tTelegram  bot is running...`);
+    console.log(`${new Date().toISOString()}\tTelegram  bot v${VERSION} is running.`);
     restorePositions().then((data) => {
         if(data?.success) {
             console.log(`${new Date().toISOString()}\tTelegram bot positions restored.`);

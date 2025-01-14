@@ -1,16 +1,17 @@
 {
-  "name": "ivnarbitragebot",
+  "name": "Spread_Arbitrage_Turtle_bot",
   "type": "module",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "main": "index.mjs",
   "scripts": {
     "start": "node index.mjs"
   },
-  "author": "",
+  "author": "ivn2203",
   "license": "ISC",
   "description": "",
   "dependencies": {
     "better-sqlite3": "^11.6.0",
+    "dotenv": "^16.4.7",
     "telegraf": "^4.16.3",
     "ws": "^8.18.0"
   }

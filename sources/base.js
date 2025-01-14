@@ -1,4 +1,5 @@
 import WebSocket from "ws";
+import { sleep } from "../utils/utils.js";
 
 class BaseExchange {
   constructor(sessionId, name, wssUrls) {
@@ -6,7 +7,6 @@ class BaseExchange {
     this.sessionId = sessionId || 0;
     this.wssUrls = wssUrls || {'SPOT': '', 'PERP': ''};
     this.ws = {"SPOT": null, "PERP": null};
-    this.keepAlive = {"SPOT": true, "PERP": true};
     this.aliveTimer = {"SPOT": 0, "PERP": 0};
     this.debug = false;
     /*
@@ -41,19 +41,24 @@ class BaseExchange {
     this.subscribeRequest={"SPOT": '', "PERP": ''};
     this.unsubscribeRequest={"SPOT": '', "PERP": ''};
     this.pingRequest={"SPOT": '', "PERP": ''};
+    this.isMarketBusy = {"SPOT": false, "PERP": false};
   }
 
   async init() {}
-
-  setKeepAlive(market, value) {
-    this.keepAlive[market] = value;
-  }
 
   setDebug(value) {
     this.debug = value;
   }
 
-    setSubscribeUnsubscribeRequests(subscribeRequest, unsubscribeRequest) {
+  isBusy(market) {
+    return this.isMarketBusy[market];
+  }
+
+  setBusy(market, value) {
+    this.isMarketBusy[market] = value;
+  }
+
+  setSubscribeUnsubscribeRequests(subscribeRequest, unsubscribeRequest) {
     this.subscribeRequest = subscribeRequest;
     this.unsubscribeRequest = unsubscribeRequest;
   }
@@ -76,15 +81,15 @@ class BaseExchange {
     }
   }
 
-  subscribe(symbol, market) {
+  subscribe(symbol, market, inRestore) {
     return new Promise((resolve, reject) => {
       // Parameters validation
       if(!this.subscribeRequest[market]) {
-        reject('subscribeRequest is not defined');
+        reject('subscribeRequest is not defined.:ERROR_NO_SUBSCRIBE_REQUEST:');
         return;
       }
       if(!symbol) {
-        reject('Symbol is not defined');
+        reject('Symbol is not defined.:ERROR_NO_SYMBOL:');
         return;
       }
       if(!this.symbols[market]) {
@@ -93,8 +98,13 @@ class BaseExchange {
       }
       // Connection validation
       if(!this.ws[market] || this.ws[market].readyState !== WebSocket.OPEN) {
-        console.error(`${new Date().toISOString()}\t${this.sessionId}\t${this.name} ${market} WebSocket is not open.`);
-        reject(`${this.name} ${market} WebSocket is not open`);
+        reject(`${this.name} ${market} WebSocket is not open.:ERROR_WS_NOT_OPEN:`);
+        return;
+      }
+      // Check if PERP/SPOT ready to execute SUBSCRIBE command. If not - reject
+      if(inRestore === false && this.isBusy(market)) {
+        console.warn(`${new Date().toISOString()}\t${this.sessionId}\t${this.name} ${market} is Busy. ${inRestore}`);
+        reject(`${this.name} ${market} is Busy.:WARN_BUSY:`);
         return;
       }
       // Increase count of real used subscriptions if it already subscribed
@@ -128,7 +138,7 @@ class BaseExchange {
         console.error(`${new Date().toISOString()}\t${this.sessionId}\t${this.name} ${market} subscribe to ${symbol} failed.`);
         this.symbols[market] && delete this.symbols[market][symbol];
         this.snapshots[market] && delete this.snapshots[market][symbol];
-        reject(`Can't subscribe to ${this.name} ${symbol} in ${market}`);
+        reject(`Can't subscribe to ${this.name} ${symbol} in ${market}.:ERROR_SUBSCRIBE_FAILED_1:`);
       }, 1500);
     });
   }
@@ -169,24 +179,33 @@ class BaseExchange {
   async restore(market) {
     console.log(`${new Date().toISOString()}\t${this.sessionId}\t${this.name} ${market} restoring started.`);
     if (this.ws[market] && this.ws[market].readyState === WebSocket.OPEN) {
-      for(const symbol of Object.keys(this.symbols[market])) {
-        if (this.symbols[market][symbol].subscribed > 0) {
-          const wasSubscribed = this.symbols[market][symbol].subscribed;
-          this.symbols[market][symbol].subscribed=0;
-          try {
-            await this.subscribe(symbol, market);
+      this.setBusy(market, true);
+      let symbols = Object.keys(this.symbols[market]);
+      let postponed = [];
+      let attempt = 0;
+      do {
+        postponed=[];
+        for(const symbol of symbols) {
+          if (this.symbols[market][symbol].subscribed > 0) {
+            const wasSubscribed = this.symbols[market][symbol].subscribed;
+            this.symbols[market][symbol].subscribed = 0;
+            try {
+              await this.subscribe(symbol, market, true);
+              this.symbols[market][symbol].subscribed = wasSubscribed;
+            } catch (e) {
+              console.error(`${new Date().toISOString()}\t${this.sessionId}\t${this.name} ${market} ${symbol} attempt ${attempt} restore subscribe error:`, e.message || e);
+              postponed.push(symbol);
+            }
           }
-          catch (e) {
-            console.error(`${new Date().toISOString()}\t${this.sessionId}\t${this.name} ${market} ${symbol} restore error:`, e.message);
-          }
-          this.symbols[market][symbol].subscribed = wasSubscribed;
         }
-      }
+        symbols = [...postponed];
+      } while(symbols.length > 0 && attempt++ < 5);
       console.log(`${new Date().toISOString()}\t${this.sessionId}\t${this.name} ${market} restoring completed.`);
-
+      this.setBusy(market, false);
     }
     else {
-      setTimeout(this.restore,100, market);
+      await sleep(100);
+      await this.restore(market);
     }
   }
 
@@ -202,28 +221,29 @@ class BaseExchange {
       if (ws) {
         ws.onopen = async () => {
           console.log(`${new Date().toISOString()}\t${this.sessionId}\tConnected to ${this.name} ${market} WebSocket`);
-          this.keepAlive[market] = true;
           ws.onerror = (error) => {
-            console.error(`${new Date().toISOString()}\t${this.sessionId}\t${this.name} ${market} WebSocket progress error:`, error);
+            console.error(`${new Date().toISOString()}\t${this.sessionId}\t${this.name} ${market} WebSocket progress error:`, error.message || error);
           }
           ws.onclose = async () => {
             this.aliveTimer[market] && clearInterval(this.aliveTimer[market]);
-            if(this.keepAlive[market]) {
-              //console.warn(`${new Date().toISOString()}\t${this.sessionId}\tReconnecting to ${this.name} ${market} WebSocket`);
+            //console.warn(`${new Date().toISOString()}\t${this.sessionId}\tReconnecting to ${this.name} ${market} WebSocket`);
+            for(let attempts = 1; attempts <= 5; attempts++) {
               try {
                 await this.connect(market);
+                break;
+              } catch (e) {
+                console.error(`${new Date().toISOString()}\t${this.sessionId}\t${this.name} ${market} WebSocket reconnection error:`, e.message || e);
+                await sleep(500);
               }
-              catch (e) {
-                console.error(`${new Date().toISOString()}\t${this.sessionId}\t${this.name} ${market} WebSocket reconnection error:`, e);
-                setTimeout(this.connect, 500, market);
-                return;
-              }
-              try {
-                await this.restore(market);
-              }
-              catch (e) {
-                console.error(`${new Date().toISOString()}\t${this.sessionId}\t${this.name} ${market} Positions restore error:`, e);
-              }
+            }
+            if(this.ws[market].readyState !== WebSocket.OPEN) {
+              throw new Error(`${new Date().toISOString()}\t${this.sessionId}\t${this.name} ${market} WebSocket is not open after 5 attempts.`);
+            }
+            try {
+              await this.restore(market);
+            }
+            catch (e) {
+              console.error(`${new Date().toISOString()}\t${this.sessionId}\t${this.name} ${market} Positions restore error:`, e.message || e);
             }
           }
           ws.onmessage = (event) => this.onMessage(market, event);
@@ -236,7 +256,7 @@ class BaseExchange {
           resolve();
         };
         ws.onerror = (error) => {
-          console.error(`${new Date().toISOString()}\t${this.sessionId}\t${this.name} ${market} WebSocket open error:`, error);
+          console.error(`${new Date().toISOString()}\t${this.sessionId}\t${this.name} ${market} WebSocket open error:`, error.message || error);
           reject(error);
         }
         ws.onclose = (closeEvent) => {
@@ -251,12 +271,9 @@ class BaseExchange {
     });
   }
 
-  terminate(market, force=false) {
+  terminate(market) {
     if(this.ws[market] && this.ws[market].readyState && (this.ws[market].readyState !== WebSocket.CLOSED && this.ws[market].readyState !== WebSocket.CLOSING)) {
-      console.log(`${new Date().toISOString()}\t${this.sessionId}\t${this.name} ${market} WebSocket Terminate request. Force: ${force}`);
-      if(force) {
-        this.keepAlive[market] = false;
-      }
+      console.log(`${new Date().toISOString()}\t${this.sessionId}\t${this.name} ${market} WebSocket Terminate request.`);
       this.ws[market].terminate();
     }
   }
@@ -268,6 +285,9 @@ class BaseExchange {
   _checkAlive = (market) => {
     if(this.ws[market] && this.ws[market].readyState === WebSocket.OPEN) {
       this.sendPing && typeof this.sendPing === "function" && this.sendPing(market);
+      if(this.isBusy(market)) {
+        return;
+      }
       for (const symbol of Object.keys(this.symbols[market])) {
         if (this.symbols[market][symbol].subscribed > 0) {
           if(this.symbols[market][symbol].cntMessages > this.symbols[market][symbol].lastMonitoredCntMessages) {
@@ -275,9 +295,11 @@ class BaseExchange {
           }
           else {
             // we have a problem with this symbol. Maybe stuck or disconnected. Need to reconnect and resubscribe
-            if(this.symbols[market][symbol].lastMonitoredCntMessages > 0 && this.keepAlive[market] === true) {
+            if(this.symbols[market][symbol].lastMonitoredCntMessages > 0) {
               console.log(`${new Date().toISOString()}\t${this.sessionId}\t${this.name} ${market} ${symbol} is stuck. Reconnecting and resubscribing.`);
+              this.setBusy(market, true);
               this.terminate(market);
+              break;
             }
           }
         }
