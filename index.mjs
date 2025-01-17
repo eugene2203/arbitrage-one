@@ -454,14 +454,14 @@ bot.start(async (ctx) => {
 bot.command('help', (ctx) => {
     ctx.replyWithHTML('<u>Available commands</u>:\n' +
       '<b>/disconnect</b> - close all positions and disconnect from CEX/DEX\n' +
-      '<b>/position [open/close] [src1] [symbol1] [src2] [market2] [symbol2] [delta?] [duration?] [volume?]</b> - create position for monitoring\n' +
+      '<b>/position [open/close] [src1] [symbol1] [src2] [market2] [symbol2] [spread?] [duration?] [volume?]</b> - create position for monitoring\n' +
       ' src1 / src2 - one of HL, BN, BB, MX\n'+
       ' symbol1 / symbol2 - symbols in format of CEX/DEX. Possible to miss USDT suffix. For example use PEPE instead of PEPEUSDT\n'+
       ' market2  - SPOT or PERP\n'+
-      ' delta  - optional. If missed use 0.05\n'+
-      ' doration  - optional. If missed use 1\n'+
+      ' spread  - optional. If missed use 0.05\n'+
+      ' duration  - optional. If missed use 1\n'+
       ' volume  - optional. If missed use 10000\n'+
-      ' Possible to miss: volume or volume+duration or volume+duration+delta\n'+
+      ' Possible to miss: volume or volume+duration or volume+duration+spread\n'+
       'Examples:\n'+
       'position open HL kPEPE BB PERP 1000PEPE 0.05\n'+
       '<i>position close MX PEPE_USDT BB SPOT PEPEUSDT 0.05 10</i> the same as <i>position close MX PEPE BB SPOT PEPE</i>\n'+
@@ -493,7 +493,7 @@ bot.command('disconnect', async (ctx) => {
 bot.command('position', async (ctx) => {
     let [command, direction, src1, symbol1, src2, market2, symbol2, delta, duration, volume] = ctx.message.text.split(' ');
     if (!direction || !src1 || !src2 || !market2 || !symbol1 || !symbol2) {
-        ctx.reply('Sorry, I did not understand the command. Please use\n/position [open/close] [src1] [symbol1] [src2] [market2] [symbol2] [delta?] [duration?] [volume?]');
+        ctx.reply('Sorry, I did not understand the command. Please use\n/position [open/close] [src1] [symbol1] [src2] [market2] [symbol2] [spread?] [duration?] [volume?]');
         return;
     }
     let market1='PERP';
