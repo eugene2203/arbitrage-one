@@ -1,7 +1,7 @@
 import BaseExchange from "./base.js";
 
 const WSS_URLS ={
-  "SPOT": "wss://wbs.mexc.com/ws",
+  "SPOT": "wss://wbs-api.mexc.com/ws",
   "PERP": "wss://contract.mexc.com/edge"
 }
 
@@ -57,7 +57,7 @@ class Mexc extends BaseExchange {
     return {
       "SPOT": {
         "method": "SUBSCRIPTION",
-        "params": ["spot@public.limit.depth.v3.api@${symbol}@20"]
+        "params": ["spot@public.limit.depth.v3.api.pb@${symbol}@20"]
       },
       "PERP": {
         "method": "sub.depth.full",
